@@ -1,8 +1,5 @@
-# catalog-sync Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change collect-comic-market-data. Update Purpose after archive.
-## Requirements
 ### Requirement: 获取社团 X (Twitter) 推文及品书图片
 系统 MUST 能够根据社团的 Twitter 用户名获取其最近发布的推文，并提取推文中的图片资源保存至本地。在提取推文时，系统 MUST 执行以下多维度校验：
 1. 时间校验：只抓取发布日期在 2026 年 6 月 1 日及之后的推文。
@@ -28,11 +25,3 @@ TBD - created by archiving change collect-comic-market-data. Update Purpose afte
 #### Scenario: 手动导入单条链接时绕过预分析过滤
 - **WHEN** 用户通过命令行参数 `--tweet-url` 明确指定导入某一条特定的推文链接
 - **THEN** 系统直接抓取并进行图片下载与落库，自动忽略并绕过 `tweet_analysis` 的文本 LLM 过滤
-
-### Requirement: 推文内容与图片关联管理
-系统 MUST 将下载的品书图片与社团 ID、推文 ID 建立明确的外键关联，以方便后续制品提取与查询。
-
-#### Scenario: 品书图片下载并与社团关联成功
-- **WHEN** 推文图片成功下载到本地
-- **THEN** 系统在 `catalogs` 表中写入对应的 `circle_id`、`tweet_id` 和本地文件路径 `image_path`
-

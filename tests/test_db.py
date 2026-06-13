@@ -317,3 +317,33 @@ def test_parse_cookie_string():
     assert cookies[0]["name"] == "name"
     assert cookies[0]["value"] == "value"
 
+def test_config_tweet_analysis():
+    from src.config import load_config
+    import tempfile
+    
+    # 建立测试用 config 文件
+    config_content = """
+openai:
+  api_key: "main-key"
+  base_url: "main-url"
+  model: "main-model"
+tweet_analysis:
+  enabled: true
+"""
+    with tempfile.NamedTemporaryFile("w", delete=False) as temp_f:
+        temp_f.write(config_content)
+        temp_f_path = temp_f.name
+        
+    try:
+        config = load_config(temp_f_path)
+        assert config["tweet_analysis"]["enabled"] is True
+        # 验证智能回退
+        assert config["tweet_analysis"]["api_key"] == "main-key"
+        assert config["tweet_analysis"]["base_url"] == "main-url"
+        assert config["tweet_analysis"]["model"] == "main-model"
+    finally:
+        import os
+        if os.path.exists(temp_f_path):
+            os.remove(temp_f_path)
+
+

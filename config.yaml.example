@@ -22,3 +22,13 @@ openai:
   base_url: "https://api.openai.com/v1"
   # 推荐使用支持视觉的模型，用于解析品书图文
   model: "gpt-4o-mini"
+
+tweet_analysis:
+  # 是否开启推文正文文本的大模型预分析过滤（过滤掉非品书的噪点推文）
+  enabled: false
+  # 支持任何兼容 OpenAI API 规范的纯文本/低成本模型（例如 DeepSeek、Qwen、本地 Ollama 等）
+  # 如果开启但未设置 api_key，将自动回退并复用上面 openai 的 Key / Base URL / Model
+  api_key: "your-analysis-api-key-here"
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+

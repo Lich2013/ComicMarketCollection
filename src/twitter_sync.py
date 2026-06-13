@@ -8,6 +8,8 @@ from urllib.parse import urlparse, parse_qs, urlunparse
 from playwright.sync_api import sync_playwright
 from src.db import get_all_circles, save_catalog
 from src.config import load_config
+from openai import OpenAI
+
 
 def parse_cookie_string(cookie_str: str, domain: str = ".x.com") -> list[dict]:
     """将普通的 Cookie 字符串（例如 'name1=val1; name2=val2'）解析为 Playwright 要求的 cookie 列表格式"""
@@ -427,6 +429,18 @@ def sync_circle_twitter(circle: dict, cookies: list[dict] = None, db_path: str =
     tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle)
     print(f"Found {len(tweets)} potential catalog tweets for @{username}.")
     
+    # Apply LLM text pre-filtering if enabled
+    config = load_config()
+    analysis_config = config.get("tweet_analysis", {})
+    if analysis_config.get("enabled", False):
+        print(f"Applying LLM text pre-filtering for @{username}...")
+        filtered_tweets = []
+        for tweet in tweets:
+            if analyze_tweet_text_with_llm(tweet["tweet_text"], circle, analysis_config):
+                filtered_tweets.append(tweet)
+        tweets = filtered_tweets
+        print(f"After LLM pre-filtering, found {len(tweets)} matching catalog tweets.")
+        
     synced_count = 0
     image_dir = f"data/images/{circle_id}"
     
@@ -784,3 +798,61 @@ def sync_single_tweet(tweet_url: str, circle_id: int = None, cookies_file: str =
             
     print(f"Successfully synced single tweet. Saved {synced_count} catalog images for Circle ID {circle_id}.")
     return synced_count > 0
+
+def analyze_tweet_text_with_llm(text: str, circle: dict, analysis_config: dict) -> bool:
+    """使用指定的 OpenAI 兼容大语言模型预分析推文文本，判断其是否为品书/新刊宣发推文"""
+    api_key = analysis_config.get("api_key")
+    base_url = analysis_config.get("base_url", "https://api.openai.com/v1")
+    model = analysis_config.get("model", "gpt-4o-mini")
+    
+    if not api_key:
+        print("Warning: tweet_analysis api_key is not configured. Skipping LLM pre-filtering.")
+        return True
+        
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    
+    system_prompt = (
+        "You are an expert assistant for Comic Market (Comiket) event participants. "
+        "Your task is to analyze the text of a tweet and determine if the author is announcing or "
+        "sharing their catalog, menu, new book details, or booth information (お品書き, 品书, 新刊, 颁布, 摊位等) for the event.\n"
+        "Respond ONLY with a JSON object containing:\n"
+        "{\n"
+        "  \"is_catalog_announcement\": true/false,\n"
+        "  \"reason\": \"A brief explanation in English or Chinese\"\n"
+        "}"
+    )
+    
+    user_prompt = f"Analyze the following tweet text:\n---\n{text}\n---"
+    if circle:
+        user_prompt += f"\nCircle Info:\nName: {circle.get('name')}\nAuthor: {circle.get('author')}\nBooth: {circle.get('hall', '')} {circle.get('block', '')} {circle.get('space', '')}"
+        
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},  # Standard JSON mode
+            timeout=15
+        )
+        content = response.choices[0].message.content.strip()
+        
+        # 兼容 Markdown 格式包裹
+        if content.startswith("```"):
+            lines = content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+            
+        res_json = json.loads(content)
+        is_catalog = res_json.get("is_catalog_announcement", False)
+        reason = res_json.get("reason", "")
+        print(f"LLM tweet pre-filtering analysis result for text [{text[:30]}...]: {is_catalog} (Reason: {reason})")
+        return is_catalog
+    except Exception as e:
+        print(f"Error during LLM text analysis: {e}. Defaulting to True to avoid missing data.")
+        return True
+

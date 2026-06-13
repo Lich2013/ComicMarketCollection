@@ -21,6 +21,12 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
             "api_key": os.environ.get("OPENAI_API_KEY", ""),
             "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        },
+        "tweet_analysis": {
+            "enabled": os.environ.get("TWEET_ANALYSIS_ENABLED", "false").lower() == "true",
+            "api_key": os.environ.get("TWEET_ANALYSIS_API_KEY", ""),
+            "base_url": os.environ.get("TWEET_ANALYSIS_BASE_URL", ""),
+            "model": os.environ.get("TWEET_ANALYSIS_MODEL", "")
         }
     }
     
@@ -53,10 +59,25 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
     if os.environ.get("OPENAI_MODEL"):
         config["openai"]["model"] = os.environ.get("OPENAI_MODEL")
         
+    if os.environ.get("TWEET_ANALYSIS_ENABLED"):
+        config["tweet_analysis"]["enabled"] = os.environ.get("TWEET_ANALYSIS_ENABLED").lower() == "true"
+    if os.environ.get("TWEET_ANALYSIS_API_KEY"):
+        config["tweet_analysis"]["api_key"] = os.environ.get("TWEET_ANALYSIS_API_KEY")
+    if os.environ.get("TWEET_ANALYSIS_BASE_URL"):
+        config["tweet_analysis"]["base_url"] = os.environ.get("TWEET_ANALYSIS_BASE_URL")
+    if os.environ.get("TWEET_ANALYSIS_MODEL"):
+        config["tweet_analysis"]["model"] = os.environ.get("TWEET_ANALYSIS_MODEL")
+        
+    # 智能回退策略
+    if not config["tweet_analysis"].get("api_key"):
+        config["tweet_analysis"]["api_key"] = config["openai"].get("api_key")
+        config["tweet_analysis"]["base_url"] = config["openai"].get("base_url")
+        config["tweet_analysis"]["model"] = config["openai"].get("model")
+        
     return config
 
 def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
-    """写入默认配置模版文件"""
+    """写入默认配置模版 file"""
     default_template = {
         "webcatalog": {
             "cookie": "AspNet.Consent=yes; .ASPXAUTH=CF6489D5F8...",
@@ -68,6 +89,12 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
         },
         "openai": {
             "api_key": "your-openai-api-key-here",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini"
+        },
+        "tweet_analysis": {
+            "enabled": False,
+            "api_key": "your-analysis-api-key-here",
             "base_url": "https://api.openai.com/v1",
             "model": "gpt-4o-mini"
         }
