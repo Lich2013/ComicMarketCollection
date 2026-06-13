@@ -153,48 +153,49 @@ def is_potential_catalog(text: str, circle: dict = None) -> bool:
                         
     return False
 
-def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None) -> list[dict]:
+def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None, since_date: str = None) -> list[dict]:
     """使用 Playwright 抓取作者推文，优先通过 API 拦截，备用 DOM 解析，并进行严格多维度过滤"""
     tweets_data = []
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        
-        if cookies:
-            try:
-                context.add_cookies(cookies)
-                print(f"Injected {len(cookies)} cookies into X.com session context.")
-            except Exception as e:
-                print(f"Error loading/injecting cookies: {e}")
-        else:
-            print("Warning: No X.com cookies provided. Might get redirected to login page.")
-            
-        page = context.new_page()
-        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        # 1. 注册 API 拦截监听器
-        api_payloads = []
-        def handle_response(response):
-            if "UserTweets" in response.url or "UserTweetsAndReplies" in response.url:
-                try:
-                    payload = response.json()
-                    api_payloads.append(payload)
-                except Exception:
-                    pass
-                    
-        page.on("response", handle_response)
-        
-        profile_url = f"https://x.com/{username}"
-        print(f"Navigating to {profile_url}...")
-        
+        browser = None
         try:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            
+            if cookies:
+                try:
+                    context.add_cookies(cookies)
+                    print(f"Injected {len(cookies)} cookies into X.com session context.")
+                except Exception as e:
+                    print(f"Error loading/injecting cookies: {e}")
+            else:
+                print("Warning: No X.com cookies provided. Might get redirected to login page.")
+                
+            page = context.new_page()
+            page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            # 1. 注册 API 拦截监听器
+            api_payloads = []
+            def handle_response(response):
+                if "UserTweets" in response.url or "UserTweetsAndReplies" in response.url:
+                    try:
+                        payload = response.json()
+                        api_payloads.append(payload)
+                    except Exception:
+                        pass
+                        
+            page.on("response", handle_response)
+            
+            profile_url = f"https://x.com/{username}"
+            print(f"Navigating to {profile_url}...")
+            
             page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(5000)
             
@@ -210,13 +211,98 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                 btn.click(force=True)
                 page.wait_for_timeout(5000)
                 
-            # 3. 滚动页面以加载更多推文并触发 API 响应 (对于高频推文用户，滚动较深以能追溯到 2026.06.01)
-            for _ in range(10):
+            # 4. 解析时间阈值
+            if not since_date:
+                try:
+                    config = load_config()
+                    since_date = config["twitter"].get("since_date") or "2026-06-01"
+                except Exception:
+                    since_date = "2026-06-01"
+            try:
+                date_threshold = datetime.fromisoformat(f"{since_date}T00:00:00+00:00")
+            except Exception:
+                date_threshold = datetime.fromisoformat("2026-06-01T00:00:00+00:00")
+
+            # 3. 滚动页面以加载更多推文并触发 API 响应 (对于高频推文用户，滚动较深以能追溯到 threshold)
+            for i in range(10):
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(2500)
                 
-            # 4. 解析被拦截的 API 响应
-            date_threshold = datetime.fromisoformat("2026-06-01T00:00:00+00:00")
+                # 滚动中段的提速检查：如果在前几次滚动中已成功拉取到早于时间阈值的普通推文，则说明已经追溯到位，可提前终止滚动
+                if i >= 1:
+                    oldest_tweet_date = None
+                    if api_payloads:
+                        for payload in api_payloads:
+                            try:
+                                result = payload.get("data", {}).get("user", {}).get("result", {})
+                                timeline = result.get("timeline", {}).get("timeline", {})
+                                instructions = timeline.get("instructions", [])
+                                for inst in instructions:
+                                    inst_type = inst.get("type")
+                                    entries = []
+                                    if inst_type == "TimelineAddEntries":
+                                        entries = inst.get("entries", [])
+                                    else:
+                                        continue
+                                        
+                                    for entry in entries:
+                                        entry_id = entry.get("entryId", "")
+                                        # 排除置顶推文，仅通过普通时间流推文的创建日期进行判定
+                                        if not entry_id.startswith("tweet-"):
+                                            continue
+                                        content = entry.get("content", {})
+                                        if content.get("entryType") != "TimelineTimelineItem":
+                                            continue
+                                        item_content = content.get("itemContent", {})
+                                        if item_content.get("itemType") != "TimelineTweet":
+                                            continue
+                                        tweet_results = item_content.get("tweet_results", {})
+                                        res = tweet_results.get("result")
+                                        if not res:
+                                            continue
+                                        typename = res.get("__typename")
+                                        tweet_obj = None
+                                        if typename == "Tweet":
+                                            tweet_obj = res
+                                        elif typename == "TweetWithVisibilityResults":
+                                            tweet_obj = res.get("tweet")
+                                        if not tweet_obj:
+                                            continue
+                                        
+                                        legacy = tweet_obj.get("legacy", {})
+                                        created_at = legacy.get("created_at", "")
+                                        if created_at:
+                                            try:
+                                                tweet_date = datetime.strptime(created_at, "%a %b %d %H:%M:%S %z %Y")
+                                                if oldest_tweet_date is None or tweet_date < oldest_tweet_date:
+                                                    oldest_tweet_date = tweet_date
+                                            except Exception:
+                                                pass
+                            except Exception:
+                                continue
+                    
+                    # 检查 DOM 元素作为备份
+                    if oldest_tweet_date is None:
+                        try:
+                            tweet_elements = page.query_selector_all("article[data-testid='tweet']")
+                            for elem in tweet_elements:
+                                social_context = elem.query_selector("div[data-testid='socialContext']")
+                                if social_context and ("置顶" in social_context.inner_text() or "Pinned" in social_context.inner_text()):
+                                    continue
+                                time_elem = elem.query_selector("time")
+                                if time_elem:
+                                    datetime_str = time_elem.get_attribute("datetime")
+                                    if datetime_str:
+                                        dt_str = datetime_str.replace("Z", "+00:00")
+                                        tweet_date = datetime.fromisoformat(dt_str)
+                                        if oldest_tweet_date is None or tweet_date < oldest_tweet_date:
+                                            oldest_tweet_date = tweet_date
+                        except Exception:
+                            pass
+                    
+                    if oldest_tweet_date and oldest_tweet_date < date_threshold:
+                        print(f"Oldest tweet found ({oldest_tweet_date}) is older than threshold ({date_threshold}). Breaking scroll loop early at scroll {i+1}.")
+                        break
             
             if api_payloads:
                 print(f"Parsing {len(api_payloads)} intercepted GraphQL API responses...")
@@ -407,15 +493,17 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                         
         except Exception as e:
             print(f"Error scraping profile {username}: {e}")
-            try:
-                screenshot_path = f"data/error_{username}.png"
-                os.makedirs("data", exist_ok=True)
-                page.screenshot(path=screenshot_path)
-                print(f"Saved error screenshot to {screenshot_path}")
-            except Exception:
-                pass
+            if 'page' in locals() and page:
+                try:
+                    screenshot_path = f"data/error_{username}.png"
+                    os.makedirs("data", exist_ok=True)
+                    page.screenshot(path=screenshot_path)
+                    print(f"Saved error screenshot to {screenshot_path}")
+                except Exception:
+                    pass
         finally:
-            browser.close()
+            if browser:
+                browser.close()
             
     return tweets_data
 
@@ -428,7 +516,9 @@ def sync_circle_twitter(circle: dict, cookies: list[dict] = None, db_path: str =
         return 0
         
     print(f"--- Starting Twitter sync for Circle '{circle.get('name')}' (@{username}) ---")
-    tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle)
+    config = load_config()
+    since_date = config["twitter"].get("since_date")
+    tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle, since_date=since_date)
     print(f"Found {len(tweets)} potential catalog tweets for @{username}.")
     
     # Apply LLM text pre-filtering if enabled
@@ -553,39 +643,40 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
     username, tweet_id = match.group(1), match.group(2)
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        
-        if cookies:
-            try:
-                context.add_cookies(cookies)
-                print(f"Injected {len(cookies)} cookies into X.com session context.")
-            except Exception as e:
-                print(f"Error loading/injecting cookies: {e}")
-                
-        page = context.new_page()
-        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        # 1. 注册 API 拦截监听器
-        api_payloads = []
-        def handle_response(response):
-            if "TweetDetail" in response.url:
-                try:
-                    payload = response.json()
-                    api_payloads.append(payload)
-                except Exception:
-                    pass
-                    
-        page.on("response", handle_response)
-        
-        print(f"Navigating to tweet detail page: {tweet_url}...")
+        browser = None
         try:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            
+            if cookies:
+                try:
+                    context.add_cookies(cookies)
+                    print(f"Injected {len(cookies)} cookies into X.com session context.")
+                except Exception as e:
+                    print(f"Error loading/injecting cookies: {e}")
+                    
+            page = context.new_page()
+            page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            # 1. 注册 API 拦截监听器
+            api_payloads = []
+            def handle_response(response):
+                if "TweetDetail" in response.url:
+                    try:
+                        payload = response.json()
+                        api_payloads.append(payload)
+                    except Exception:
+                        pass
+                        
+            page.on("response", handle_response)
+            
+            print(f"Navigating to tweet detail page: {tweet_url}...")
             page.goto(tweet_url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(5000)
             
@@ -710,15 +801,17 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
                         
         except Exception as e:
             print(f"Error scraping single tweet {tweet_url}: {e}")
-            try:
-                screenshot_path = f"data/error_tweet_{tweet_id}.png"
-                os.makedirs("data", exist_ok=True)
-                page.screenshot(path=screenshot_path)
-                print(f"Saved error screenshot to {screenshot_path}")
-            except Exception:
-                pass
+            if 'page' in locals() and page:
+                try:
+                    screenshot_path = f"data/error_tweet_{tweet_id}.png"
+                    os.makedirs("data", exist_ok=True)
+                    page.screenshot(path=screenshot_path)
+                    print(f"Saved error screenshot to {screenshot_path}")
+                except Exception:
+                    pass
         finally:
-            browser.close()
+            if browser:
+                browser.close()
             
     return parsed_tweet
 

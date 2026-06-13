@@ -140,11 +140,27 @@ def save_catalog(catalog_data: dict, db_path: str = DEFAULT_DB_PATH) -> int:
             if row:
                 return row[0]
         except sqlite3.Error as e:
-            # 如果 RETURNING id 不支持或者冲突，尝试直接查询
-            cursor.execute("SELECT id FROM catalogs WHERE tweet_id = ?", (catalog_data['tweet_id'],))
-            row = cursor.fetchone()
-            if row:
-                return row[0]
+            # 如果是由于低版本 SQLite 不支持 RETURNING id 语法引起的报错，降级执行无 RETURNING 子句的语句
+            try:
+                fallback_query = """
+                    INSERT INTO catalogs (
+                        circle_id, tweet_id, tweet_url, tweet_text, image_path, status, created_at, updated_at
+                    ) VALUES (
+                        :circle_id, :tweet_id, :tweet_url, :tweet_text, :image_path, :status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT(tweet_id) DO UPDATE SET
+                        image_path = COALESCE(excluded.image_path, image_path),
+                        tweet_text = COALESCE(excluded.tweet_text, tweet_text),
+                        updated_at = CURRENT_TIMESTAMP
+                """
+                cursor.execute(fallback_query, catalog_data)
+                conn.commit()
+                cursor.execute("SELECT id FROM catalogs WHERE tweet_id = ?", (catalog_data['tweet_id'],))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+            except Exception:
+                pass
             raise e
         # 兜底查询
         cursor.execute("SELECT id FROM catalogs WHERE tweet_id = ?", (catalog_data['tweet_id'],))

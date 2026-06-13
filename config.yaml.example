@@ -16,6 +16,8 @@ twitter:
   # 建议使用块格式（|）避免 JSON 子串引起 YAML 解析错误
   cookie_string: |
     auth_token=YOUR_AUTH_TOKEN; ct0=YOUR_CT0_TOKEN; ...
+  # 仅抓取发布日期在此日期及之后的推文（格式：YYYY-MM-DD，若不设置默认为 2026-06-01）
+  since_date: "2026-06-01"
 
 openai:
   api_key: "sk-your-openai-api-key-here"

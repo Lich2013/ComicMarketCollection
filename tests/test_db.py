@@ -502,4 +502,131 @@ def test_scrape_twitter_profile_retweet_deduplication():
         assert tweets[0]["image_urls"] == ["https://pbs.twimg.com/media/photo1.jpg"]
 
 
+def test_config_tweet_analysis_granular_fallback():
+    from src.config import load_config
+    import tempfile
+    
+    config_content = """
+openai:
+  api_key: "main-key"
+  base_url: "main-url"
+  model: "main-model"
+tweet_analysis:
+  enabled: true
+  model: "deepseek-v4-flash"
+  base_url: "https://api.deepseek.com/v1"
+"""
+    with tempfile.NamedTemporaryFile("w", delete=False) as temp_f:
+        temp_f.write(config_content)
+        temp_f_path = temp_f.name
+        
+    try:
+        config = load_config(temp_f_path)
+        assert config["tweet_analysis"]["enabled"] is True
+        # api_key should fallback to main key
+        assert config["tweet_analysis"]["api_key"] == "main-key"
+        # model and base_url should keep custom values and NOT fallback
+        assert config["tweet_analysis"]["model"] == "deepseek-v4-flash"
+        assert config["tweet_analysis"]["base_url"] == "https://api.deepseek.com/v1"
+    finally:
+        import os
+        if os.path.exists(temp_f_path):
+            os.remove(temp_f_path)
+
+
+def test_save_catalog_sqlite_fallback():
+    from unittest.mock import patch
+    import sqlite3
+    from src.db import get_db_connection
+    
+    class MockCursor:
+        def __init__(self, real_cursor):
+            self.real_cursor = real_cursor
+            
+        def execute(self, sql, params=None):
+            if isinstance(sql, str) and "RETURNING id" in sql:
+                raise sqlite3.OperationalError("near \"RETURNING\": syntax error (mocked)")
+            if params is not None:
+                return self.real_cursor.execute(sql, params)
+            return self.real_cursor.execute(sql)
+            
+        def fetchone(self):
+            return self.real_cursor.fetchone()
+            
+        def fetchall(self):
+            return self.real_cursor.fetchall()
+            
+        def __getattr__(self, name):
+            return getattr(self.real_cursor, name)
+            
+    class MockConnection:
+        def __init__(self, real_conn):
+            self.real_conn = real_conn
+            
+        def cursor(self):
+            return MockCursor(self.real_conn.cursor())
+            
+        def commit(self):
+            return self.real_conn.commit()
+            
+        def execute(self, sql, params=None):
+            if isinstance(sql, str) and "RETURNING id" in sql:
+                raise sqlite3.OperationalError("near \"RETURNING\": syntax error (mocked)")
+            if params is not None:
+                return self.real_conn.execute(sql, params)
+            return self.real_conn.execute(sql)
+            
+        def __enter__(self):
+            return self
+            
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return self.real_conn.__exit__(exc_type, exc_val, exc_tb)
+            
+        def __getattr__(self, name):
+            return getattr(self.real_conn, name)
+
+    original_get_db_connection = get_db_connection
+    
+    def mock_get_db_connection(db_path=TEST_DB_PATH):
+        real_conn = original_get_db_connection(db_path)
+        return MockConnection(real_conn)
+        
+    circle_data = {
+        "id": 555,
+        "name": "Fallback Circle",
+        "author": "Author F",
+        "genre": "Original",
+        "description": "",
+        "hall": "e7",
+        "day": "Day2",
+        "block": "B",
+        "space": "02b",
+        "twitter_url": "https://twitter.com/fallback",
+        "twitter_username": "fallback",
+        "pixiv_url": "",
+        "circle_cut_url": ""
+    }
+    save_circle(circle_data, db_path=TEST_DB_PATH)
+    
+    catalog_data = {
+        "circle_id": 555,
+        "tweet_id": "fallback_tweet",
+        "tweet_url": "https://twitter.com/fallback/status/fallback_tweet",
+        "tweet_text": "Here is our catalog!",
+        "image_path": "data/images/555/catalog.jpg",
+        "status": "pending"
+    }
+    
+    with patch("src.db.get_db_connection", mock_get_db_connection):
+        cat_id = save_catalog(catalog_data, db_path=TEST_DB_PATH)
+        assert cat_id is not None
+        
+    # Verify it was successfully saved
+    pending = get_pending_catalogs(db_path=TEST_DB_PATH)
+    assert len(pending) == 1
+    assert pending[0]["tweet_id"] == "fallback_tweet"
+
+
+
+
 

@@ -102,33 +102,89 @@ def extract_goods_from_catalog(catalog: dict, openai_config: dict) -> tuple[bool
             response_format=CatalogExtraction,
             timeout=60
         )
-        
         result = response.choices[0].message.parsed
-        if not result:
-            print("Failed to get parsed structure from LLM.")
+    except Exception as parse_error:
+        print(f"Structured outputs failed, trying standard JSON Mode fallback: {parse_error}")
+        try:
+            # 引导生成符合 CatalogExtraction 结构的 JSON 对象
+            json_user_prompt = (
+                f"{user_prompt}\n"
+                "You MUST respond ONLY with a JSON object matching this schema:\n"
+                "{\n"
+                "  \"is_catalog\": true/false,\n"
+                "  \"items\": [\n"
+                "    {\n"
+                "      \"name\": \"item name\",\n"
+                "      \"type\": \"item type\",\n"
+                "      \"price\": 1000,\n"
+                "      \"is_set\": true/false\n"
+                "    }\n"
+                "  ]\n"
+                "}"
+            )
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "content": json_user_prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                response_format={"type": "json_object"},
+                timeout=60
+            )
+            content = response.choices[0].message.content.strip()
+            
+            # 兼容 Markdown 格式包裹
+            if content.startswith("```"):
+                lines = content.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                content = "\n".join(lines).strip()
+                
+            result = CatalogExtraction.model_validate_json(content)
+        except Exception as fallback_error:
+            print(f"JSON Mode fallback also failed: {fallback_error}")
             return False, []
-            
-        if not result.is_catalog:
-            print("LLM classified this image as NOT a catalog sheet.")
-            return False, []
-            
-        extracted_items = []
-        for item in result.items:
-            extracted_items.append({
-                "circle_id": catalog["circle_id"],
-                "catalog_id": catalog["id"],
-                "name": item.name,
-                "type": item.type,
-                "price": item.price,
-                "is_set": 1 if item.is_set else 0,
-                "raw_json": json.dumps(item.model_dump(), ensure_ascii=False)
-            })
-            
-        return True, extracted_items
-        
-    except Exception as e:
-        print(f"OpenAI API call failed: {e}")
+
+    if not result:
+        print("Failed to get parsed structure from LLM.")
         return False, []
+        
+    if not result.is_catalog:
+        print("LLM classified this image as NOT a catalog sheet.")
+        return False, []
+        
+    extracted_items = []
+    for item in result.items:
+        extracted_items.append({
+            "circle_id": catalog["circle_id"],
+            "catalog_id": catalog["id"],
+            "name": item.name,
+            "type": item.type,
+            "price": item.price,
+            "is_set": 1 if item.is_set else 0,
+            "raw_json": json.dumps(item.model_dump(), ensure_ascii=False)
+        })
+        
+    return True, extracted_items
 
 def process_pending_catalogs(
     db_path: str = None,

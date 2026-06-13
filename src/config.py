@@ -15,7 +15,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         },
         "twitter": {
             "cookies_file": os.environ.get("TWITTER_COOKIES_FILE", "data/twitter_cookies.json"),
-            "cookie_string": os.environ.get("TWITTER_COOKIE_STRING", "")
+            "cookie_string": os.environ.get("TWITTER_COOKIE_STRING", ""),
+            "since_date": os.environ.get("TWITTER_SINCE_DATE", "")
         },
         "openai": {
             "api_key": os.environ.get("OPENAI_API_KEY", ""),
@@ -52,6 +53,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         config["twitter"]["cookies_file"] = os.environ.get("TWITTER_COOKIES_FILE")
     if os.environ.get("TWITTER_COOKIE_STRING"):
         config["twitter"]["cookie_string"] = os.environ.get("TWITTER_COOKIE_STRING")
+    if os.environ.get("TWITTER_SINCE_DATE"):
+        config["twitter"]["since_date"] = os.environ.get("TWITTER_SINCE_DATE")
     if os.environ.get("OPENAI_API_KEY"):
         config["openai"]["api_key"] = os.environ.get("OPENAI_API_KEY")
     if os.environ.get("OPENAI_BASE_URL"):
@@ -68,11 +71,15 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
     if os.environ.get("TWEET_ANALYSIS_MODEL"):
         config["tweet_analysis"]["model"] = os.environ.get("TWEET_ANALYSIS_MODEL")
         
-    # 智能回退策略
-    if not config["tweet_analysis"].get("api_key"):
-        config["tweet_analysis"]["api_key"] = config["openai"].get("api_key")
-        config["tweet_analysis"]["base_url"] = config["openai"].get("base_url")
-        config["tweet_analysis"]["model"] = config["openai"].get("model")
+    # 智能回退策略（按字段独立 fallback）
+    analysis = config["tweet_analysis"]
+    openai = config["openai"]
+    if not analysis.get("api_key"):
+        analysis["api_key"] = openai.get("api_key")
+    if not analysis.get("base_url"):
+        analysis["base_url"] = openai.get("base_url")
+    if not analysis.get("model"):
+        analysis["model"] = openai.get("model")
         
     return config
 
@@ -85,7 +92,8 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
         },
         "twitter": {
             "cookies_file": "data/twitter_cookies.json",
-            "cookie_string": ""
+            "cookie_string": "",
+            "since_date": "2026-06-01"
         },
         "openai": {
             "api_key": "your-openai-api-key-here",
