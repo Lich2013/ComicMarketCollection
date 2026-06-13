@@ -1,0 +1,24 @@
+# Comic Market Collection 配置文件模板
+# 复制此文件为 config.yaml 并填入你的真实配置：
+#   cp config.yaml.example config.yaml
+#
+# 注意：config.yaml 已被 .gitignore 排除，不会被提交到版本控制。
+
+webcatalog:
+  # 从浏览器开发者工具 -> Application -> Cookies 中复制
+  cookie: "AspNet.Consent=yes; .ASPXAUTH=YOUR_TOKEN_HERE; ..."
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+twitter:
+  # 方式一：指定包含 Cookie 的 JSON 文件路径（Netscape/JSON 格式均可）
+  cookies_file: "data/twitter_cookies.json"
+  # 方式二：直接粘贴 Cookie 字符串（与 cookies_file 二选一）
+  # 建议使用块格式（|）避免 JSON 子串引起 YAML 解析错误
+  cookie_string: |
+    auth_token=YOUR_AUTH_TOKEN; ct0=YOUR_CT0_TOKEN; ...
+
+openai:
+  api_key: "sk-your-openai-api-key-here"
+  base_url: "https://api.openai.com/v1"
+  # 推荐使用支持视觉的模型，用于解析品书图文
+  model: "gpt-4o-mini"
