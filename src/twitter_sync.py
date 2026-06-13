@@ -301,8 +301,9 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                                 if rt_match.group(1).lower() != username.lower():
                                     continue
                                     
-                            # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本
+                            # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本，并归一化为原推 ID
                             retweet_legacy = legacy
+                            original_tweet_id = tweet_id
                             retweet_res = legacy.get("retweeted_status_result", {}).get("result")
                             if retweet_res:
                                 rt_typename = retweet_res.get("__typename")
@@ -313,6 +314,7 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                                     rt_obj = retweet_res.get("tweet")
                                 if rt_obj:
                                     retweet_legacy = rt_obj.get("legacy", legacy)
+                                    original_tweet_id = rt_obj.get("rest_id", tweet_id)
                                     
                             resolved_text = retweet_legacy.get("full_text", "")
                             
@@ -327,9 +329,9 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                                 
                             # 上下文关键字匹配
                             if is_potential_catalog(resolved_text, circle):
-                                parsed_tweets[tweet_id] = {
-                                    "tweet_id": tweet_id,
-                                    "tweet_url": f"https://x.com/{username}/status/{tweet_id}",
+                                parsed_tweets[original_tweet_id] = {
+                                    "tweet_id": original_tweet_id,
+                                    "tweet_url": f"https://x.com/{username}/status/{original_tweet_id}",
                                     "tweet_text": resolved_text,
                                     "image_urls": img_urls
                                 }
@@ -644,8 +646,9 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
                                 
                             legacy = tweet_obj.get("legacy", {})
                             
-                            # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本
+                            # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本，并归一化为原推 ID
                             retweet_legacy = legacy
+                            original_tweet_id = tweet_id
                             retweet_res = legacy.get("retweeted_status_result", {}).get("result")
                             if retweet_res:
                                 rt_typename = retweet_res.get("__typename")
@@ -656,6 +659,7 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
                                     rt_obj = retweet_res.get("tweet")
                                 if rt_obj:
                                     retweet_legacy = rt_obj.get("legacy", legacy)
+                                    original_tweet_id = rt_obj.get("rest_id", tweet_id)
                                     
                             resolved_text = retweet_legacy.get("full_text", "")
                             
@@ -666,8 +670,8 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
                                     img_urls.append(media.get("media_url_https"))
                                     
                             parsed_tweet = {
-                                "tweet_id": tweet_id,
-                                "tweet_url": tweet_url,
+                                "tweet_id": original_tweet_id,
+                                "tweet_url": f"https://x.com/{username}/status/{original_tweet_id}",
                                 "tweet_text": resolved_text,
                                 "image_urls": img_urls
                             }

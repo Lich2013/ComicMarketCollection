@@ -346,4 +346,160 @@ tweet_analysis:
         if os.path.exists(temp_f_path):
             os.remove(temp_f_path)
 
+def test_save_catalog_on_conflict_update():
+    # 验证 ON CONFLICT DO UPDATE 行为
+    circle_data = {
+        "id": 777,
+        "name": "De-dup Circle",
+        "author": "Author D",
+        "genre": "Original",
+        "description": "",
+        "hall": "e7",
+        "day": "Day2",
+        "block": "B",
+        "space": "02b",
+        "twitter_url": "https://twitter.com/dedup",
+        "twitter_username": "dedup",
+        "pixiv_url": "",
+        "circle_cut_url": ""
+    }
+    save_circle(circle_data, db_path=TEST_DB_PATH)
+    
+    # 第一次保存，status = 'pending'
+    catalog_data_1 = {
+        "circle_id": 777,
+        "tweet_id": "1800000000000000000_0",
+        "tweet_url": "https://twitter.com/dedup/status/1800000000000000000",
+        "tweet_text": "Original text C107 お品書き",
+        "image_path": "data/images/777/image_0.jpg",
+        "status": "pending"
+    }
+    save_catalog(catalog_data_1, db_path=TEST_DB_PATH)
+    
+    # 验证已保存
+    pending = get_pending_catalogs(db_path=TEST_DB_PATH)
+    assert len(pending) == 1
+    assert pending[0]["tweet_id"] == "1800000000000000000_0"
+    assert pending[0]["tweet_text"] == "Original text C107 お品書き"
+    
+    # 模拟第二次保存（自转归一化后重新导入），文字略有更新，状态依然为 pending 覆盖
+    catalog_data_2 = {
+        "circle_id": 777,
+        "tweet_id": "1800000000000000000_0",
+        "tweet_url": "https://twitter.com/dedup/status/1800000000000000000",
+        "tweet_text": "Original text C107 お品書き (Updated)",
+        "image_path": "data/images/777/image_0_new.jpg",
+        "status": "pending"
+    }
+    save_catalog(catalog_data_2, db_path=TEST_DB_PATH)
+    
+    # 验证只有一条记录，且字段被成功更新
+    pending = get_pending_catalogs(db_path=TEST_DB_PATH)
+    assert len(pending) == 1
+    assert pending[0]["tweet_id"] == "1800000000000000000_0"
+    assert pending[0]["tweet_text"] == "Original text C107 お品書き (Updated)"
+    assert pending[0]["image_path"] == "data/images/777/image_0_new.jpg"
+
+def test_scrape_twitter_profile_retweet_deduplication():
+    from unittest.mock import patch, MagicMock
+    
+    mock_playwright = MagicMock()
+    mock_browser = mock_playwright.chromium.launch.return_value
+    mock_context = mock_browser.new_context.return_value
+    mock_page = mock_context.new_page.return_value
+    
+    # 拦截 page.on("response", callback)
+    registered_callbacks = []
+    def mock_on(event_name, callback):
+        if event_name == "response":
+            registered_callbacks.append(callback)
+            
+    mock_page.on.side_effect = mock_on
+    
+    # 当 page.goto 被调用时，模拟触发 response 监听器
+    def mock_goto(url, *args, **kwargs):
+        # 构造自转推文的 GraphQL 响应
+        mock_payload = {
+            "data": {
+                "user": {
+                    "result": {
+                        "timeline": {
+                            "timeline": {
+                                "instructions": [
+                                    {
+                                        "type": "TimelineAddEntries",
+                                        "entries": [
+                                            {
+                                                "entryId": "tweet-1800000000000000001",
+                                                "content": {
+                                                    "entryType": "TimelineTimelineItem",
+                                                    "itemContent": {
+                                                        "itemType": "TimelineTweet",
+                                                        "tweet_results": {
+                                                            "result": {
+                                                                "__typename": "Tweet",
+                                                                "rest_id": "1800000000000000001",
+                                                                "legacy": {
+                                                                    "created_at": "Sat Jun 13 12:00:00 +0000 2026",
+                                                                    "full_text": "RT @test_user: original text",
+                                                                    "retweeted_status_result": {
+                                                                        "result": {
+                                                                            "__typename": "Tweet",
+                                                                            "rest_id": "1800000000000000000",
+                                                                            "legacy": {
+                                                                                "created_at": "Sat Jun 06 12:00:00 +0000 2026",
+                                                                                "full_text": "original text #品书",
+                                                                                "extended_entities": {
+                                                                                    "media": [
+                                                                                        {
+                                                                                            "type": "photo",
+                                                                                            "media_url_https": "https://pbs.twimg.com/media/photo1.jpg"
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        mock_response = MagicMock()
+        mock_response.url = "https://x.com/i/api/graphql/.../UserTweets"
+        mock_response.json.return_value = mock_payload
+        
+        for cb in registered_callbacks:
+            cb(mock_response)
+            
+    mock_page.goto.side_effect = mock_goto
+    mock_page.locator.return_value.first.is_visible.return_value = False
+    
+    # mock sync_playwright Context Manager
+    with patch("src.twitter_sync.sync_playwright") as mock_sync_pw:
+        mock_sync_pw.return_value.__enter__.return_value = mock_playwright
+        
+        # 执行抓取
+        from src.twitter_sync import scrape_twitter_profile
+        tweets = scrape_twitter_profile("test_user", cookies=None, max_tweets=5)
+        
+        # 验证是否成功归一化为原推 ID
+        assert len(tweets) == 1
+        assert tweets[0]["tweet_id"] == "1800000000000000000"
+        assert tweets[0]["tweet_url"] == "https://x.com/test_user/status/1800000000000000000"
+        assert tweets[0]["tweet_text"] == "original text #品书"
+        assert tweets[0]["image_urls"] == ["https://pbs.twimg.com/media/photo1.jpg"]
+
+
 
