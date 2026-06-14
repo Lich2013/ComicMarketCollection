@@ -8,7 +8,7 @@ from urllib.parse import urlparse, parse_qs, urlunparse
 from playwright.sync_api import sync_playwright
 from src.db import get_all_circles, save_catalog
 from src.config import load_config
-from openai import OpenAI
+from src.utils.observability import get_openai_client
 
 
 def parse_cookie_string(cookie_str: str, domain: str = ".x.com") -> list[dict]:
@@ -925,22 +925,24 @@ def analyze_tweet_text_with_llm(text: str, circle: dict, analysis_config: dict) 
         print("Warning: tweet_analysis api_key is not configured. Skipping LLM pre-filtering.")
         return True
         
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     
     system_prompt = (
-        "You are an expert assistant for Comic Market (Comiket) event participants. "
-        "Your task is to analyze the text of a tweet and determine if the author is announcing or "
-        "sharing their catalog, menu, new book details, or booth information (お品書き, 品书, 新刊, 颁布, 摊位等) for the event.\n"
-        "Respond ONLY with a JSON object containing:\n"
+        "你是一位服务于 Comic Market (Comiket / 漫展) 参展者的专业助手。\n"
+        "你的任务是分析推文文本并判断以下两点：\n"
+        "1. 该推文是否与 Comic Market (Comiket / コミックマーケット / コミケ) 展会相关？（例如提到 C104、C105、Comic Market 等。注意：如果推文只提到了 M3、例大祭等其他展会，而未涉及 Comic Market，则该项应为 false）。\n"
+        "2. 作者是否正在发布或分享该展会的品书、新刊宣发、商品菜单、或摊位信息（お品書き、品书、新刊、颁布、摊位等）？\n\n"
+        "请仅返回一个标准的 JSON 对象，格式如下，不要包含任何额外的对话或 markdown 代码块标记：\n"
         "{\n"
+        "  \"is_comic_market\": true/false,\n"
         "  \"is_catalog_announcement\": true/false,\n"
-        "  \"reason\": \"A brief explanation in English or Chinese\"\n"
+        "  \"reason\": \"简短的中文或英文原因解释\"\n"
         "}"
     )
     
-    user_prompt = f"Analyze the following tweet text:\n---\n{text}\n---"
+    user_prompt = f"请分析以下推文文本：\n---\n{text}\n---"
     if circle:
-        user_prompt += f"\nCircle Info:\nName: {circle.get('name')}\nAuthor: {circle.get('author')}\nBooth: {circle.get('hall', '')} {circle.get('block', '')} {circle.get('space', '')}"
+        user_prompt += f"\n社团信息：\n社团名: {circle.get('name')}\n作者: {circle.get('author')}\n摊位: {circle.get('hall', '')} {circle.get('block', '')} {circle.get('space', '')}"
         
     try:
         response = client.chat.completions.create(
@@ -964,10 +966,12 @@ def analyze_tweet_text_with_llm(text: str, circle: dict, analysis_config: dict) 
             content = "\n".join(lines).strip()
             
         res_json = json.loads(content)
+        is_comic_market = res_json.get("is_comic_market", False)
         is_catalog = res_json.get("is_catalog_announcement", False)
         reason = res_json.get("reason", "")
-        print(f"LLM tweet pre-filtering analysis result for text [{text[:30]}...]: {is_catalog} (Reason: {reason})")
-        return is_catalog
+        passed = is_comic_market and is_catalog
+        print(f"LLM tweet pre-filtering analysis result for text [{text[:30]}...]: is_comic_market={is_comic_market}, is_catalog={is_catalog}. Passed: {passed} (Reason: {reason})")
+        return passed
     except Exception as e:
         print(f"Error during LLM text analysis: {e}. Defaulting to True to avoid missing data.")
         return True

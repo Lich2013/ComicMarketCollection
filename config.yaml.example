@@ -51,4 +51,15 @@ image_recognition:
     # 当 JSON 解析失败但输出有文本时，是否通过低成本文本 API 进行二次规整转换
     fallback_text_formatter: true
 
+langfuse:
+  # 是否启用 Langfuse 链路追踪
+  enabled: false
+  # 自托管 Langfuse 的 host 地址，默认为本地 http://localhost:3000
+  host: "http://localhost:3000"
+  # 你的 Langfuse Project Public Key
+  public_key: "pk-lf-your-public-key-here"
+  # 你的 Langfuse Project Secret Key
+  secret_key: "sk-lf-your-secret-key-here"
+
+
 

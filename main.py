@@ -92,6 +92,11 @@ def main():
         print("Done. Please edit config.yaml to configure your cookies and API keys.")
         sys.exit(0)
         
+    # 加载配置并初始化可观测性
+    config = load_config()
+    from src.utils.observability import init_observability
+    init_observability(config)
+        
     # 2. 初始化数据库
     if args.init_db:
         print(f"Initializing database at {args.db_path}...")

@@ -7,7 +7,7 @@ import shlex
 import subprocess
 from PIL import Image
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from src.utils.observability import get_openai_client
 
 from src.db import get_pending_catalogs, save_goods, update_catalog_status
 from src.config import load_config
@@ -220,7 +220,7 @@ def format_unstructured_text_via_api(unstructured_text: str, config: dict) -> li
         print("Warning: API Key missing for fallback text formatting.")
         return []
         
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     
     system_prompt = (
         "You are an expert parsing assistant. Your task is to read the unstructured text input, "
@@ -276,7 +276,7 @@ def extract_goods_via_openai(catalog: dict, openai_config: dict) -> tuple[bool, 
     if not api_key:
         raise ValueError("OpenAI API key is missing. Please set OPENAI_API_KEY environment variable or configure config.yaml.")
         
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     
     try:
         base64_image = encode_image_to_jpeg_base64(image_path)

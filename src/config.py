@@ -38,6 +38,12 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
                 "timeout": int(os.environ.get("IMAGE_RECOGNITION_CMD_TIMEOUT", "180")),
                 "fallback_text_formatter": os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER", "true").lower() == "true"
             }
+        },
+        "langfuse": {
+            "enabled": os.environ.get("LANGFUSE_ENABLED", "false").lower() == "true",
+            "host": os.environ.get("LANGFUSE_HOST", "http://localhost:3000"),
+            "public_key": os.environ.get("LANGFUSE_PUBLIC_KEY", ""),
+            "secret_key": os.environ.get("LANGFUSE_SECRET_KEY", "")
         }
     }
     
@@ -95,6 +101,15 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
     if os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER"):
         config["image_recognition"]["cmd"]["fallback_text_formatter"] = os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER").lower() == "true"
         
+    if os.environ.get("LANGFUSE_ENABLED"):
+        config["langfuse"]["enabled"] = os.environ.get("LANGFUSE_ENABLED").lower() == "true"
+    if os.environ.get("LANGFUSE_HOST"):
+        config["langfuse"]["host"] = os.environ.get("LANGFUSE_HOST")
+    if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+        config["langfuse"]["public_key"] = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    if os.environ.get("LANGFUSE_SECRET_KEY"):
+        config["langfuse"]["secret_key"] = os.environ.get("LANGFUSE_SECRET_KEY")
+
     # 智能回退策略（按字段独立 fallback）
     analysis = config["tweet_analysis"]
     openai = config["openai"]
@@ -139,6 +154,12 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
                 "timeout": 180,
                 "fallback_text_formatter": True
             }
+        },
+        "langfuse": {
+            "enabled": False,
+            "host": "http://localhost:3000",
+            "public_key": "pk-lf-your-public-key-here",
+            "secret_key": "sk-lf-your-secret-key-here"
         }
     }
     with open(config_path, "w", encoding="utf-8") as f:
