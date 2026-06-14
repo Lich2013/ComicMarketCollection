@@ -492,7 +492,7 @@ def test_scrape_twitter_profile_retweet_deduplication():
         
         # 执行抓取
         from src.twitter_sync import scrape_twitter_profile
-        tweets = scrape_twitter_profile("test_user", cookies=None, max_tweets=5)
+        tweets = scrape_twitter_profile("test_user", cookies=None, max_tweets=5, until_date="2026-06-15")
         
         # 验证是否成功归一化为原推 ID
         assert len(tweets) == 1
@@ -625,6 +625,240 @@ def test_save_catalog_sqlite_fallback():
     pending = get_pending_catalogs(db_path=TEST_DB_PATH)
     assert len(pending) == 1
     assert pending[0]["tweet_id"] == "fallback_tweet"
+
+
+def test_scrape_twitter_profile_until_date_filtering():
+    from unittest.mock import patch, MagicMock
+    from src.twitter_sync import scrape_twitter_profile
+    
+    mock_playwright = MagicMock()
+    mock_browser = mock_playwright.chromium.launch.return_value
+    mock_context = mock_browser.new_context.return_value
+    mock_page = mock_context.new_page.return_value
+    
+    registered_callbacks = []
+    def mock_on(event_name, callback):
+        if event_name == "response":
+            registered_callbacks.append(callback)
+            
+    mock_page.on.side_effect = mock_on
+    
+    def mock_goto(url, *args, **kwargs):
+        # 构造带有不同发布时间的 GraphQL 响应
+        mock_payload = {
+            "data": {
+                "user": {
+                    "result": {
+                        "timeline": {
+                            "timeline": {
+                                "instructions": [
+                                    {
+                                        "type": "TimelineAddEntries",
+                                        "entries": [
+                                            {
+                                                "entryId": "tweet-1800000000000000001",
+                                                "content": {
+                                                    "entryType": "TimelineTimelineItem",
+                                                    "itemContent": {
+                                                        "itemType": "TimelineTweet",
+                                                        "tweet_results": {
+                                                            "result": {
+                                                                "__typename": "Tweet",
+                                                                "rest_id": "1800000000000000001",
+                                                                "legacy": {
+                                                                    "created_at": "Sat Jun 06 12:00:00 +0000 2026",
+                                                                    "full_text": "C108お品書き 较新推文",
+                                                                    "extended_entities": {
+                                                                        "media": [{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo1.jpg"}]
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "entryId": "tweet-1800000000000000002",
+                                                "content": {
+                                                    "entryType": "TimelineTimelineItem",
+                                                    "itemContent": {
+                                                        "itemType": "TimelineTweet",
+                                                        "tweet_results": {
+                                                            "result": {
+                                                                "__typename": "Tweet",
+                                                                "rest_id": "1800000000000000002",
+                                                                "legacy": {
+                                                                    "created_at": "Wed Jun 03 12:00:00 +0000 2026",
+                                                                    "full_text": "C108お品書き 目标区间推文",
+                                                                    "extended_entities": {
+                                                                        "media": [{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo2.jpg"}]
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "entryId": "tweet-1800000000000000003",
+                                                "content": {
+                                                    "entryType": "TimelineTimelineItem",
+                                                    "itemContent": {
+                                                        "itemType": "TimelineTweet",
+                                                        "tweet_results": {
+                                                            "result": {
+                                                                "__typename": "Tweet",
+                                                                "rest_id": "1800000000000000003",
+                                                                "legacy": {
+                                                                    "created_at": "Sat May 30 12:00:00 +0000 2026",
+                                                                    "full_text": "C107お品書き 较旧推文",
+                                                                    "extended_entities": {
+                                                                        "media": [{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo3.jpg"}]
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        mock_response = MagicMock()
+        mock_response.url = "https://x.com/i/api/graphql/.../UserTweets"
+        mock_response.json.return_value = mock_payload
+        
+        for cb in registered_callbacks:
+            cb(mock_response)
+            
+    mock_page.goto.side_effect = mock_goto
+    mock_page.locator.return_value.first.is_visible.return_value = False
+    
+    with patch("src.twitter_sync.sync_playwright") as mock_sync_pw:
+        mock_sync_pw.return_value.__enter__.return_value = mock_playwright
+        
+        # 1. 抓取：指定区间在 2026-06-01 到 2026-06-05 之间
+        tweets = scrape_twitter_profile("test_user", cookies=None, max_tweets=5, since_date="2026-06-01", until_date="2026-06-05")
+        
+        # 只有中间的那一条（Wed Jun 03 12:00:00 +0000 2026）应该被保存
+        assert len(tweets) == 1
+        assert tweets[0]["tweet_id"] == "1800000000000000002"
+        assert tweets[0]["tweet_text"] == "C108お品書き 目标区间推文"
+
+
+def test_export_goods_to_csv():
+    import tempfile
+    import csv
+    from src.db import export_goods_to_csv
+    
+    # 1. 插入测试数据
+    c1 = {
+        "id": 101, "name": "Circle A", "author": "Author A", "genre": "Original",
+        "description": "", "hall": "East 1", "day": "Day1", "block": "A", "space": "01a",
+        "twitter_url": "https://twitter.com/circlea", "twitter_username": "a", "pixiv_url": "", "circle_cut_url": ""
+    }
+    c2 = {
+        "id": 102, "name": "Circle B", "author": "Author B", "genre": "VTuber",
+        "description": "", "hall": "West 1", "day": "Day2", "block": "B", "space": "02b",
+        "twitter_url": "https://twitter.com/circleb", "twitter_username": "b", "pixiv_url": "", "circle_cut_url": ""
+    }
+    save_circle(c1, db_path=TEST_DB_PATH)
+    save_circle(c2, db_path=TEST_DB_PATH)
+    
+    cat1 = {
+        "circle_id": 101, "tweet_id": "t1", "tweet_url": "https://x.com/a/status/t1", "tweet_text": "C108新刊",
+        "image_path": "path1", "status": "pending"
+    }
+    cat2 = {
+        "circle_id": 102, "tweet_id": "t2", "tweet_url": "https://x.com/b/status/t2", "tweet_text": "C108周边",
+        "image_path": "path2", "status": "pending"
+    }
+    cat1_id = save_catalog(cat1, db_path=TEST_DB_PATH)
+    cat2_id = save_catalog(cat2, db_path=TEST_DB_PATH)
+    
+    goods = [
+        {
+            "circle_id": 101,
+            "catalog_id": cat1_id,
+            "name": "Goods A1",
+            "type": "新刊",
+            "price": 1000,
+            "is_set": 0,
+            "raw_json": "{}"
+        },
+        {
+            "circle_id": 102,
+            "catalog_id": cat2_id,
+            "name": "Goods B1",
+            "type": "周边",
+            "price": 500,
+            "is_set": 1,
+            "raw_json": "{}"
+        }
+    ]
+    save_goods(goods, db_path=TEST_DB_PATH)
+    
+    with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".csv") as temp_csv:
+        temp_csv_path = temp_csv.name
+        
+    try:
+        # 2. 全量导出验证
+        export_goods_to_csv(temp_csv_path, db_path=TEST_DB_PATH)
+        
+        # 校验带 BOM 的 UTF-8 编码
+        with open(temp_csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            assert headers == ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
+            
+            rows = list(reader)
+            assert len(rows) == 2
+            
+            # 第一行 (Circle A - Day1)
+            assert rows[0][0] == "Day1"
+            assert rows[0][1] == "East 1"
+            assert rows[0][2] == "A"
+            assert rows[0][3] == "East 1 A01a"  # 拼接摊位号
+            assert rows[0][4] == "Circle A"
+            assert rows[0][5] == "Author A"
+            assert rows[0][6] == "Original"      # 类别 (genre)
+            assert rows[0][7] == "新刊"
+            assert rows[0][8] == "Goods A1"
+            assert rows[0][9] == "1"
+            assert rows[0][10] == "1000"
+            assert rows[0][11] == "https://x.com/a/status/t1"
+            assert rows[0][12] == "https://twitter.com/circlea"
+            
+        # 3. 按条件筛选导出验证 (只导出 Day2)
+        export_goods_to_csv(temp_csv_path, day_list=["Day2"], db_path=TEST_DB_PATH)
+        with open(temp_csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            next(reader) # skip headers
+            rows = list(reader)
+            assert len(rows) == 1
+            assert rows[0][4] == "Circle B"
+            assert rows[0][6] == "VTuber"
+            
+        # 4. 无匹配条件导出验证
+        export_goods_to_csv(temp_csv_path, day_list=["Day3"], db_path=TEST_DB_PATH)
+        with open(temp_csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            next(reader)
+            rows = list(reader)
+            assert len(rows) == 0
+            
+    finally:
+        import os
+        if os.path.exists(temp_csv_path):
+            os.remove(temp_csv_path)
+
 
 
 

@@ -176,7 +176,7 @@ def get_pending_catalogs(db_path: str = DEFAULT_DB_PATH, circle_ids: set[int] = 
                 return []
             placeholders = ",".join("?" for _ in circle_ids)
             query = f"""
-                SELECT c.*, cir.name as circle_name 
+                SELECT c.*, cir.name as circle_name, cir.author as circle_author 
                 FROM catalogs c
                 JOIN circles cir ON c.circle_id = cir.id
                 WHERE c.status = 'pending' AND c.circle_id IN ({placeholders})
@@ -184,7 +184,7 @@ def get_pending_catalogs(db_path: str = DEFAULT_DB_PATH, circle_ids: set[int] = 
             cursor.execute(query, list(circle_ids))
         else:
             query = """
-                SELECT c.*, cir.name as circle_name 
+                SELECT c.*, cir.name as circle_name, cir.author as circle_author 
                 FROM catalogs c
                 JOIN circles cir ON c.circle_id = cir.id
                 WHERE c.status = 'pending'
@@ -247,3 +247,100 @@ def save_goods(goods_list: list[dict], db_path: str = DEFAULT_DB_PATH):
     with get_db_connection(db_path) as conn:
         conn.executemany(query, goods_list)
         conn.commit()
+
+
+def export_goods_to_csv(
+    output_path: str,
+    day_list: list[str] = None,
+    hall_list: list[str] = None,
+    circle_ids: list[int] = None,
+    name_query: str = None,
+    db_path: str = DEFAULT_DB_PATH
+):
+    """将商品数据以 UTF-8 with BOM 编码导出为 CSV，以供 Excel 直接打开"""
+    import csv
+    import os
+    
+    # 动态筛选社团
+    has_filter = any(x is not None for x in [day_list, hall_list, circle_ids, name_query])
+    if has_filter:
+        target_circle_ids = get_filtered_circle_ids(
+            day_list=day_list,
+            hall_list=hall_list,
+            circle_ids=circle_ids,
+            name_query=name_query,
+            db_path=db_path
+        )
+    else:
+        target_circle_ids = None
+
+    # 自动创建父级目录
+    if os.path.dirname(output_path):
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    headers = ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
+
+    rows = []
+    if target_circle_ids is not None and not target_circle_ids:
+        # 有筛选但没有匹配的社团，写表头空表
+        pass
+    else:
+        query = """
+            SELECT 
+                c.day AS "day",
+                c.hall AS "hall",
+                c.block AS "block",
+                c.space AS "space",
+                c.name AS "circle_name",
+                c.author AS "circle_author",
+                c.genre AS "circle_genre",
+                g.type AS "goods_type",
+                g.name AS "goods_name",
+                1 AS "quantity",
+                g.price AS "price",
+                cat.tweet_url AS "tweet_url",
+                c.twitter_url AS "twitter_url"
+            FROM goods g
+            JOIN circles c ON g.circle_id = c.id
+            LEFT JOIN catalogs cat ON g.catalog_id = cat.id
+        """
+        params = []
+        if target_circle_ids is not None:
+            placeholders = ",".join("?" for _ in target_circle_ids)
+            query += f" WHERE g.circle_id IN ({placeholders})"
+            params.extend(list(target_circle_ids))
+
+        query += " ORDER BY c.day, c.hall, c.block, c.space"
+
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        for row in rows:
+            # 摊位号格式：场馆 + 区域 + 展位号，比如 "东7 A45a"
+            hall = row["hall"] or ""
+            block = row["block"] or ""
+            space = row["space"] or ""
+            booth = f"{hall} {block}{space}".strip()
+
+            writer.writerow([
+                row["day"],
+                row["hall"],
+                row["block"],
+                booth,
+                row["circle_name"],
+                row["circle_author"],
+                row["circle_genre"],
+                row["goods_type"],
+                row["goods_name"],
+                row["quantity"],
+                row["price"],
+                row["tweet_url"],
+                row["twitter_url"]
+            ])
+            
+    print(f"Successfully exported {len(rows)} goods items to {output_path}")

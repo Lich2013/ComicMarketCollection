@@ -68,6 +68,8 @@ uv run main.py --write-config
 - `WEBCATALOG_USER_AGENT`: WebCatalog 访问时使用的 User-Agent。
 - `TWITTER_COOKIE_STRING`: X.com 的普通 Cookie 字符串（形如 `auth_token=xxx; ct0=yyy;`）。
 - `TWITTER_COOKIES_FILE`: X.com Cookie 的 JSON/文本 文件路径。
+- `TWITTER_SINCE_DATE`: X.com 推文同步起始日期限制 (格式: YYYY-MM-DD)。
+- `TWITTER_UNTIL_DATE`: X.com 推文同步截止日期限制 (格式: YYYY-MM-DD)。
 - `OPENAI_API_KEY`: OpenAI API Key。
 - `OPENAI_BASE_URL`: OpenAI 接口的基础 URL。
 - `OPENAI_MODEL`: OpenAI 使用的多模态模型（默认：`gpt-4o-mini`）。
@@ -99,14 +101,14 @@ uv run main.py --write-config
 
 在同步社团、抓取推文或提取制品时，您可以附加以下参数来进行**按需过滤**，以显著减少网络开销与 API 请求费用（均支持与自定义 `--db-path` 搭配使用）：
 
-| 参数名 | 类型 | 说明 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `--days` | `str` | 限制参展日期（用逗号隔开） | `--days Day1` 或 `--days Day1,Day2` |
-| `--halls` | `str` | 限制参展场馆（用逗号隔开，不区分大小写） | `--halls e7` 或 `--halls e7,s12` |
-| `--circle-ids` | `str` | 限制社团唯一 ID（用逗号隔开） | `--circle-ids 23003977` |
-| `--circle-name` | `str` | 限制社团名或作者名，进行模糊匹配 | `--circle-name ねこ` |
-| `--db-path` | `str` | 指定 SQLite 数据库文件路径 | `--db-path data/custom.db` |
-| `--force` | `bool` | 强制重新同步（即便本地数据库已存在该记录也不跳过） | `--force` |
+| 参数名          | 类型   | 说明                                               | 示例                                |
+| :-------------- | :----- | :------------------------------------------------- | :---------------------------------- |
+| `--days`        | `str`  | 限制参展日期（用逗号隔开）                         | `--days Day1` 或 `--days Day1,Day2` |
+| `--halls`       | `str`  | 限制参展场馆（用逗号隔开，不区分大小写）           | `--halls e7` 或 `--halls e7,s12`    |
+| `--circle-ids`  | `str`  | 限制社团唯一 ID（用逗号隔开）                      | `--circle-ids 23003977`             |
+| `--circle-name` | `str`  | 限制社团名或作者名，进行模糊匹配                   | `--circle-name ねこ`                |
+| `--db-path`     | `str`  | 指定 SQLite 数据库文件路径                         | `--db-path data/custom.db`          |
+| `--force`       | `bool` | 强制重新同步（即便本地数据库已存在该记录也不跳过） | `--force`                           |
 
 ---
 
@@ -132,6 +134,7 @@ uv run main.py --sync-circles --days Day2 --halls e7 --force
 
 * **方式一：批量过滤与按需增量同步** (`--fetch-tweets`)
   为数据库中符合筛选条件的社团抓取最新推文，将符合品书关键字/展位号规则的图片下载至本地 `data/images/{circle_id}/`，并在数据库中写入记录，初始状态计为 `pending`：
+  
   ```bash
   # 全量同步所有配置了 Twitter 链接的社团
   uv run main.py --fetch-tweets
@@ -145,9 +148,12 @@ uv run main.py --sync-circles --days Day2 --halls e7 --force
   # 定向模糊匹配：仅同步社团名/作者名包含“ねこ”的推文
   uv run main.py --fetch-tweets --circle-name ねこ
   ```
+  
+  > **注意（时间窗口限制）**：批量同步默认仅抓取处于 `since_date`（默认 `2026-06-01`）至 `until_date`（默认 `2026-06-05`）时间范围内的推文。这两个日期可在 `config.yaml` 文件的 `twitter.since_date` 和 `twitter.until_date` 中配置，或通过环境变量覆盖。如果在滚动或数据分析中遇到早于起始时间的非置顶推文，系统会自动提前中止滚动以提升抓取效率。
 
 * **方式二：指定单条博文链接同步** (`--tweet-url`)
   手动输入指定的一条 X 博文链接进行单推同步。系统会自动从 URL 解析出作者用户名并在数据库中智能匹配关联对应的社团，将图片下载至本地并落库为 `pending` 状态：
+  
   ```bash
   # 自动匹配数据库社团并导入
   uv run main.py --tweet-url https://x.com/nekomata/status/2062809125718016071
@@ -158,8 +164,13 @@ uv run main.py --sync-circles --days Day2 --halls e7 --force
 
 ---
 
-### 5. 多模态 GPT 提取制品信息 (`--extract-goods`)
-扫描数据库中处于 `pending` 状态下的推文品书图片，发送给 GPT 进行多模态 OCR 及结构化识别，解析出同人制品名称、类型、价格并存入 `goods` 数据表，随后将该品书状态更新为 `processed`：
+### 5. 品书制品信息结构化提取 (`--extract-goods`)
+扫描数据库中处于 `pending` 状态下的推文品书图片，调用识别引擎进行多模态 OCR 及结构化识别，解析出同人制品名称、类型、价格并存入 `goods` 数据表，随后将该品书状态更新为 `processed`。
+
+本项目支持**双识别引擎模式**，可在 `config.yaml` 的 `image_recognition.provider` 中自由切换：
+- **`openai` 引擎**：直接调用 OpenAI/GPT-4o-mini 多模态 API 进行智能品书提取（需配置 `openai.api_key`）。
+- **`cmd` 引擎**：调用本地自定义命令行图像识别工具（如特定的本地视觉 Agent 命令行， 如codex、agy等），支持自定义参数占位符（如 `{image_path}`, `{prompt}`）、超时控制以及当输出格式非标时调用文本大模型二次规整的容错机制（`fallback_text_formatter`）。
+
 ```bash
 # 全量解析所有 pending 状态的品书图
 uv run main.py --extract-goods
@@ -169,6 +180,23 @@ uv run main.py --extract-goods --days Day2 --halls e7
 
 # 定向解析：仅解析社团 ID 为 23003977 的待处理品书
 uv run main.py --extract-goods --circle-ids 23003977
+```
+
+---
+
+### 6. 导出同人商品数据至 CSV (`--export-goods`)
+将本地 SQLite 数据库中提取并解析出的商品数据批量导出为符合 Excel 直接双击打开不乱码格式的 CSV 文件（采用带 BOM 的 UTF-8 编码）。
+
+为了方便现场最顺路地逛展购买，导出的记录将自动按照物理路线最优化排序（`日期` -> `场馆` -> `区域` -> `摊位号` 升序）。
+
+导出的 CSV 包含以下列：`日期`、`场馆`、`区域`、`摊位号`（合并展位信息）、`社团名`、`作者`、`类别` (genre)、`类型`、`商品`、`数量`（默认 `1`）、`价格`、`来源推文`、`社交媒体`。
+
+```bash
+# 全量导出所有解析到的商品信息
+uv run main.py --export-goods data/shopping_list.csv
+
+# 按需导出：仅导出 Day1 且在东123厅 (e123) 的商品，过滤生成的购买清单
+uv run main.py --export-goods data/day1_east123_list.csv --days Day1 --halls e123
 ```
 
 ---

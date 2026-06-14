@@ -1,16 +1,12 @@
-# catalog-sync Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change collect-comic-market-data. Update Purpose after archive.
-## Requirements
 ### Requirement: 获取社团 X (Twitter) 推文及品书图片
 系统 MUST 能够根据社团的 Twitter 用户名获取其最近发布的推文，并提取推文中的图片资源保存至本地。在提取推文时，系统 MUST 执行以下多维度校验：
-1. 时间校验：只抓取发布日期在配置的 `since_date`（在配置文件的 `twitter.since_date` 中定义，若未配置则默认为 `2026-06-01`）及之后的推文。
+1. 时间校验：只抓取发布日期在 `since_date`（在配置文件的 `twitter.since_date` 中定义，若未配置则默认为 `2026-06-01`）及之后，且在 `until_date`（在配置文件的 `twitter.until_date` 中定义，若未配置则默认为 `2026-06-05`）及之前的推文。
 2. 属性校验：推文链接的用户名必须与目标社团的 Twitter 用户名一致（仅允许原创或自我转发，不允许转发他人博文）。
 3. 关联校验：推文必须含有至少一张图片。
 4. 内容检索匹配：推文正文必须包含通用 CM 词汇（如 C108、コミックマーケット、コミケ 等）或者社团专有信息（如社团名、作者名、包含 hall/block/space 的展位号字符串等）。
 5. 文本 LLM 意图校验（若启用）：当配置文件中启用了 `tweet_analysis.enabled` 时，系统在通过前 4 项初筛后，MUST 调用指定的 OpenAI 兼容文本大语言模型，对推文文本进行语义分析，验证其是否为真正的品书或新刊宣发推文。若模型判断为否，系统 MUST 跳过该推文的下载和入库。若手动指定导入单条推文链接（`--tweet-url`），系统 SHALL 自动跳过此文本 LLM 意图校验。
-6. 抓取终止校验：在滚动页面抓取推文的过程中，如果当前已经加载或拦截到的推文的最旧时间早于设定的时间校验阈值，系统 MUST 中止滚动以减少多余的操作和耗时。
 
 系统 MUST 支持在同步推文时，根据用户指定的社团筛选参数（如指定 ID 列表、名称或模糊匹配、日期及展馆）仅同步符合条件的社团的推文。
 
@@ -27,13 +23,9 @@ TBD - created by archiving change collect-comic-market-data. Update Purpose afte
 - **THEN** 系统直接忽略该推文，不下载其配图，且不在数据库中记录任何相关信息
 
 #### Scenario: 手动导入单条链接时绕过预分析过滤
-- **WHEN** 用户通过命令行参数 `--tweet-url` to 指定导入某一条特定的推文链接
-- **THEN** 系统直接抓取并进行图片下载与落库，自动忽略并绕过 `tweet_analysis` 的文本 LLM 过滤
+- **WHEN** 用户通过命令行参数 `--tweet-url` 明确指定导入某一条特定的推文链接
+- **THEN** system 直接抓取并进行图片下载与落库，自动忽略并绕过 `tweet_analysis` 的文本 LLM 过滤
 
-### Requirement: 推文内容与图片关联管理
-系统 MUST 将下载的品书图片与社团 ID、推文 ID 建立明确的外键关联，以方便后续制品提取与查询。
-
-#### Scenario: 品书图片下载并与社团关联成功
-- **WHEN** 推文图片成功下载到本地
-- **THEN** 系统在 `catalogs` 表中写入对应的 `circle_id`、`tweet_id` 和本地文件路径 `image_path`
-
+#### Scenario: 推文发布时间晚于截止时间上限而被跳过
+- **WHEN** 抓取到的推文发布时间晚于配置的截止时间 `until_date`（如 2026-06-05 00:00:00）
+- **THEN** 系统必须跳过该推文，不进行下载与落库

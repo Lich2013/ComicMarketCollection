@@ -68,6 +68,11 @@ def main():
         help="自定义 SQLite 数据库路径 (默认: data/comic_market.db)"
     )
     parser.add_argument(
+        "--export-goods",
+        type=str,
+        help="导出解析到的商品数据为 CSV 文件 (如: data/goods.csv)"
+    )
+    parser.add_argument(
         "--force", 
         action="store_true", 
         help="强制更新，即使数据已在数据库中存在也不跳过"
@@ -168,6 +173,32 @@ def main():
             hall_list=hall_list,
             circle_ids=circle_ids,
             name_query=circle_name
+        )
+
+    # 6. 导出商品至 CSV
+    if args.export_goods:
+        init_db(args.db_path)
+        
+        day_list = [x.strip() for x in args.days.split(",") if x.strip()] if args.days else None
+        hall_list = [x.strip() for x in args.halls.split(",") if x.strip()] if args.halls else None
+        circle_ids = None
+        if args.circle_ids:
+            try:
+                circle_ids = [int(x.strip()) for x in args.circle_ids.split(",") if x.strip()]
+            except ValueError:
+                print("Error: --circle-ids must be a comma-separated list of integers.", file=sys.stderr)
+                sys.exit(1)
+        circle_name = args.circle_name
+        
+        print(f"Starting goods export to: {args.export_goods}...")
+        from src.db import export_goods_to_csv
+        export_goods_to_csv(
+            output_path=args.export_goods,
+            day_list=day_list,
+            hall_list=hall_list,
+            circle_ids=circle_ids,
+            name_query=circle_name,
+            db_path=args.db_path
         )
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ twitter:
     auth_token=YOUR_AUTH_TOKEN; ct0=YOUR_CT0_TOKEN; ...
   # 仅抓取发布日期在此日期及之后的推文（格式：YYYY-MM-DD，若不设置默认为 2026-06-01）
   since_date: "2026-06-01"
+  # 仅抓取发布日期在此日期及之前的推文（格式：YYYY-MM-DD，若不设置默认为 2026-06-05）
+  until_date: "2026-06-05"
 
 openai:
   api_key: "sk-your-openai-api-key-here"
@@ -33,4 +35,20 @@ tweet_analysis:
   api_key: "your-analysis-api-key-here"
   base_url: "https://api.openai.com/v1"
   model: "gpt-4o-mini"
+
+image_recognition:
+  # 品书提取识别引擎："openai"（使用原有 API）或 "cmd"（使用自定义命令行工具）
+  provider: "openai"
+  cmd:
+    # 可执行命令名或路径
+    command: "agy"
+    # 命令行参数列表，其中 {prompt} 会被替换为系统在代码中构造的完整商品提取 Prompts
+    # 同时支持占位符: {image_path}, {abs_image_path}, {circle_name}, {circle_author}
+    args:
+      - "-p"
+      - "{prompt}"
+    timeout: 180
+    # 当 JSON 解析失败但输出有文本时，是否通过低成本文本 API 进行二次规整转换
+    fallback_text_formatter: true
+
 

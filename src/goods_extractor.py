@@ -1,12 +1,38 @@
 import io
 import json
 import base64
+import os
+import re
+import shlex
+import subprocess
 from PIL import Image
 from pydantic import BaseModel, Field
 from openai import OpenAI
 
 from src.db import get_pending_catalogs, save_goods, update_catalog_status
 from src.config import load_config
+
+# --- 默认 Prompt 模版 ---
+DEFAULT_PROMPT_TEMPLATE = (
+    "【注意：请仅扮演图片视觉识别助手。你唯一被允许的事情是使用视觉查看工具读取指定的图片路径，禁止检索、阅读或分析本地代码仓（如 src 目录）中的任何文件，禁止调用测试或查询数据库。】\n"
+    "请使用你的视觉工具查看并分析以下路径的图片文件：{image_path}。\n"
+    "这张图片是 Comic Market 社团“{circle_name}”（作者：“{circle_author}”）的展位宣传图或品书。\n\n"
+    "请执行以下提取任务：\n"
+    "1. 判断该图片是否是品书/お品書き（即包含同人本、制品、周边清单及其日元价格的版面）。如果属于品书且有商品列表，设置 `is_catalog` 为 true；否则为 false。\n"
+    "2. 如果 `is_catalog` 为 true，提取其中列出的所有商品信息。对于每项商品，提取名称 (name)、类型 (type)、价格 (price: 整数) 以及是否为套装 (is_set)。\n\n"
+    "请严格以下面的 JSON 格式输出结果，不要包含任何多余的前后解释和文字：\n"
+    "{\n"
+    "  \"is_catalog\": true/false,\n"
+    "  \"items\": [\n"
+    "    {\n"
+    "      \"name\": \"商品名称\",\n"
+    "      \"type\": \"新刊/既刊/周边/套装\",\n"
+    "      \"price\": 1000,\n"
+    "      \"is_set\": true/false\n"
+    "    }\n"
+    "  ]\n"
+    "}"
+)
 
 # --- Pydantic 结构定义 ---
 
@@ -38,14 +64,210 @@ def encode_image_to_jpeg_base64(image_path: str, max_size: int = 1500) -> str:
         img.save(buffered, format="JPEG", quality=85)
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# --- 核心提取逻辑 ---
+# --- 强容错数据清洗与解析器 ---
 
-def extract_goods_from_catalog(catalog: dict, openai_config: dict) -> tuple[bool, list[dict]]:
-    """调用 OpenAI 多模态 API 解析单张品书图"""
+def clean_price(price_raw) -> int:
+    """清洗价格字段，支持 '1,000円', '￥500', 1000.0 等各种脏数据"""
+    if isinstance(price_raw, (int, float)):
+        return int(price_raw)
+    if not price_raw:
+        return 0
+        
+    price_str = str(price_raw).strip()
+    price_str = re.sub(r"[^\d]", "", price_str)
+    try:
+        return int(price_str) if price_str else 0
+    except ValueError:
+        return 0
+
+def clean_boolean(val) -> bool:
+    """清洗布尔字段，支持 'yes', 'no', '1', 0 等各种布尔表达方式"""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    if isinstance(val, str):
+        return val.lower() in ("true", "1", "yes", "y", "套装", "set")
+    return False
+
+def fuzzy_normalize_item(raw_item: dict) -> dict:
+    """模糊键名匹配器：将各类异形 key 映射归一化为 name, type, price, is_set"""
+    name_candidates = ["name", "title", "product", "book", "goods", "item", "名称", "新刊"]
+    type_candidates = ["type", "category", "genre", "类型"]
+    price_candidates = ["price", "cost", "yen", "amount", "value", "价格", "金额"]
+    set_candidates = ["is_set", "set", "has_set", "is_package", "套装"]
+    
+    normalized = {"name": "", "type": "其他", "price": 0, "is_set": False}
+    
+    for k in name_candidates:
+        if k in raw_item:
+            normalized["name"] = str(raw_item[k]).strip()
+            break
+            
+    for k in type_candidates:
+        if k in raw_item:
+            normalized["type"] = str(raw_item[k]).strip()
+            break
+            
+    for k in price_candidates:
+        if k in raw_item:
+            normalized["price"] = clean_price(raw_item[k])
+            break
+            
+    for k in set_candidates:
+        if k in raw_item:
+            normalized["is_set"] = clean_boolean(raw_item[k])
+            break
+    else:
+        name_lower = normalized["name"].lower()
+        if any(x in name_lower for x in ["set", "套装", "セット", "合同誌セット"]):
+            normalized["is_set"] = True
+            
+    return normalized
+
+def parse_json_from_stdout(stdout_text: str) -> tuple[bool, bool, list]:
+    """稳健地截取并解析 CLI 标准输出中的 JSON 块"""
+    stdout_text = stdout_text.strip()
+    
+    # 1. 首先尝试直接解析整个 stdout
+    try:
+        data = json.loads(stdout_text)
+        if isinstance(data, dict):
+            is_catalog = clean_boolean(data.get("is_catalog", True))
+            items = data.get("items", [])
+            return True, is_catalog, items
+        elif isinstance(data, list):
+            return True, True, data
+    except Exception:
+        pass
+
+    # 2. 尝试寻找 markdown json 代码块
+    match = re.search(r"```(?:json)?\s*(\[.*?\]|\{.*?\})\s*```", stdout_text, re.DOTALL | re.IGNORECASE)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            if isinstance(data, dict):
+                is_catalog = clean_boolean(data.get("is_catalog", True))
+                items = data.get("items", [])
+                return True, is_catalog, items
+            elif isinstance(data, list):
+                return True, True, data
+        except Exception:
+            pass
+
+    # 3. 智能寻找大括号/中括号
+    start_obj = stdout_text.find('{')
+    end_obj = stdout_text.rfind('}')
+    start_arr = stdout_text.find('[')
+    end_arr = stdout_text.rfind(']')
+    
+    json_str = None
+    if start_arr != -1 and (start_obj == -1 or start_arr < start_obj):
+        if end_arr > start_arr:
+            json_str = stdout_text[start_arr:end_arr+1]
+    elif start_obj != -1:
+        if end_obj > start_obj:
+            json_str = stdout_text[start_obj:end_obj+1]
+            
+    if json_str:
+        try:
+            data = json.loads(json_str)
+            if isinstance(data, dict):
+                is_catalog = clean_boolean(data.get("is_catalog", True))
+                items = data.get("items", [])
+                return True, is_catalog, items
+            elif isinstance(data, list):
+                return True, True, data
+        except Exception:
+            pass
+            
+    return False, False, []
+
+def try_parse_markdown_list(stdout_text: str) -> list[dict]:
+    """尝试用正则解析 Markdown 列表 (例如 '- 商品名 1000円' 或 '* 商品名 ￥500')"""
+    items = []
+    lines = stdout_text.split("\n")
+    # 匹配模式：列表符 [空格] 商品名 [空格/破折号/冒号/￥等] 价格 [円/元/等]
+    pattern = re.compile(r"^[-*+]\s+(.+?)\s*[-:：——￥$¥]*\s*(\d[\d,]*)\s*[円元$¥]?$")
+    
+    for line in lines:
+        line = line.strip()
+        match = pattern.match(line)
+        if match:
+            name_raw = match.group(1).strip()
+            price_raw = match.group(2)
+            
+            is_set = any(x in name_raw.lower() for x in ["set", "套装", "セット", "合同誌セット"])
+            items.append({
+                "name": name_raw,
+                "type": "套装" if is_set else "新刊",
+                "price": clean_price(price_raw),
+                "is_set": is_set
+            })
+            
+    return items
+
+def format_unstructured_text_via_api(unstructured_text: str, config: dict) -> list[dict]:
+    """调用纯文本大模型将非结构化文本整理为标准的商品列表"""
+    analysis_config = config.get("tweet_analysis", {})
+    openai_config = config.get("openai", {})
+    
+    api_key = analysis_config.get("api_key") or openai_config.get("api_key")
+    base_url = analysis_config.get("base_url") or openai_config.get("base_url")
+    model = analysis_config.get("model") or openai_config.get("model", "gpt-4o-mini")
+    
+    if not api_key:
+        print("Warning: API Key missing for fallback text formatting.")
+        return []
+        
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    
+    system_prompt = (
+        "You are an expert parsing assistant. Your task is to read the unstructured text input, "
+        "identify Comic Market goods/books/sets and their JPY prices, and output a standard JSON list. "
+        "Your response MUST be ONLY a JSON array of items, each having: "
+        '{"name": "string", "type": "string", "price": integer, "is_set": boolean}. '
+        "Do NOT write any conversational text or explanation. Only output standard JSON."
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Parse the following text:\n{unstructured_text}"}
+            ],
+            response_format={"type": "json_object"},
+            timeout=20
+        )
+        content = response.choices[0].message.content.strip()
+        
+        if content.startswith("```"):
+            lines = content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+            
+        data = json.loads(content)
+        if isinstance(data, list):
+            return data
+        elif isinstance(data, dict):
+            if "items" in data and isinstance(data["items"], list):
+                return data["items"]
+            return [data]
+    except Exception as e:
+        print(f"Failed to format unstructured text via API: {e}")
+        
+    return []
+
+# --- 核心提取子引擎 ---
+
+def extract_goods_via_openai(catalog: dict, openai_config: dict) -> tuple[bool, list]:
+    """使用 OpenAI 多模态 API 解析单张品书图"""
     image_path = catalog.get("image_path")
     circle_name = catalog.get("circle_name", "未知社团")
-    
-    print(f"Extracting goods from catalog image for {circle_name}: {image_path}")
     
     api_key = openai_config.get("api_key")
     base_url = openai_config.get("base_url")
@@ -103,10 +325,11 @@ def extract_goods_from_catalog(catalog: dict, openai_config: dict) -> tuple[bool
             timeout=60
         )
         result = response.choices[0].message.parsed
+        if result:
+            return result.is_catalog, result.items
     except Exception as parse_error:
         print(f"Structured outputs failed, trying standard JSON Mode fallback: {parse_error}")
         try:
-            # 引导生成符合 CatalogExtraction 结构的 JSON 对象
             json_user_prompt = (
                 f"{user_prompt}\n"
                 "You MUST respond ONLY with a JSON object matching this schema:\n"
@@ -150,7 +373,6 @@ def extract_goods_from_catalog(catalog: dict, openai_config: dict) -> tuple[bool
             )
             content = response.choices[0].message.content.strip()
             
-            # 兼容 Markdown 格式包裹
             if content.startswith("```"):
                 lines = content.split("\n")
                 if lines[0].startswith("```"):
@@ -160,28 +382,144 @@ def extract_goods_from_catalog(catalog: dict, openai_config: dict) -> tuple[bool
                 content = "\n".join(lines).strip()
                 
             result = CatalogExtraction.model_validate_json(content)
+            if result:
+                return result.is_catalog, result.items
         except Exception as fallback_error:
             print(f"JSON Mode fallback also failed: {fallback_error}")
-            return False, []
+            
+    return False, []
 
-    if not result:
-        print("Failed to get parsed structure from LLM.")
+def extract_goods_via_cmd(catalog: dict, cmd_config: dict, config: dict) -> tuple[bool, list]:
+    """使用自定义命令行进行品书图像识别"""
+    image_path = catalog.get("image_path", "")
+    abs_image_path = os.path.abspath(image_path)
+    circle_name = catalog.get("circle_name", "未知社团")
+    circle_author = catalog.get("circle_author", "未知作者")
+    
+    command = cmd_config.get("command", "agy")
+    args = cmd_config.get("args", ["-p", "{prompt}"])
+    timeout = cmd_config.get("timeout", 180)
+    
+    # 构造 Prompt
+    prompt_template = cmd_config.get("prompt_template", DEFAULT_PROMPT_TEMPLATE)
+    prompt = prompt_template.replace("{image_path}", image_path) \
+                             .replace("{abs_image_path}", abs_image_path) \
+                             .replace("{circle_name}", circle_name) \
+                             .replace("{circle_author}", circle_author)
+    
+    # 处理参数列表中的占位符
+    processed_args = []
+    for arg in args:
+        processed_arg = arg.replace("{prompt}", prompt) \
+                           .replace("{image_path}", image_path) \
+                           .replace("{abs_image_path}", abs_image_path) \
+                           .replace("{circle_name}", circle_name) \
+                           .replace("{circle_author}", circle_author)
+        processed_args.append(processed_arg)
+        
+    cmd_parts = shlex.split(command)
+    full_cmd = cmd_parts + processed_args
+    print(f"Executing custom recognition command: {' '.join(shlex.quote(x) for x in full_cmd)}")
+    
+    try:
+        result = subprocess.run(
+            full_cmd,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        
+        # 打印调试日志，方便用户定位 CLI 的返回结果
+        print(f"--- CLI Execution Debug Log ---")
+        print(f"Exit Code: {result.returncode}")
+        print(f"STDOUT:\n{result.stdout.strip()}")
+        print(f"STDERR:\n{result.stderr.strip()}")
+        print(f"--------------------------------")
+        
+        if result.returncode != 0:
+            print(f"Command failed with code {result.returncode}. Stderr: {result.stderr}")
+            return False, []
+            
+        stdout_content = result.stdout.strip()
+        
+        # 1. 尝试解析 JSON
+        parsed_ok, is_catalog, raw_items = parse_json_from_stdout(stdout_content)
+        if parsed_ok:
+            return is_catalog, raw_items
+            
+        # 2. 解析失败时，尝试解析 Markdown 列表形式
+        raw_items = try_parse_markdown_list(stdout_content)
+        if raw_items:
+            return True, raw_items
+            
+        # 3. 如果仍无结果，且开启了 fallback_text_formatter，调用纯文本 API 进行转换
+        if cmd_config.get("fallback_text_formatter", True):
+            print("CLI output parsing failed. Falling back to low-cost text-to-JSON API parser...")
+            raw_items = format_unstructured_text_via_api(stdout_content, config)
+            if raw_items:
+                return True, raw_items
+            
         return False, []
         
-    if not result.is_catalog:
-        print("LLM classified this image as NOT a catalog sheet.")
+    except subprocess.TimeoutExpired:
+        print(f"Command timed out after {timeout} seconds.")
+    except Exception as e:
+        print(f"Error executing command: {e}")
+        
+    return False, []
+
+# --- 统一分发器入口 ---
+
+def extract_goods_from_catalog(catalog: dict, config: dict) -> tuple[bool, list[dict]]:
+    """主分发器入口，支持不同图像识别引擎的选择，并执行通用的数据归一化后处理"""
+    # 兼容历史的 openai_config 传参方式
+    if "api_key" in config and "image_recognition" not in config:
+        provider = "openai"
+        openai_config = config
+        cmd_config = {}
+    else:
+        ir_config = config.get("image_recognition", {})
+        provider = ir_config.get("provider", "openai")
+        openai_config = config.get("openai", {})
+        cmd_config = ir_config.get("cmd", {})
+        
+    # 分发至对应识别引擎
+    if provider == "openai":
+        is_catalog, raw_items = extract_goods_via_openai(catalog, openai_config)
+    elif provider == "cmd":
+        is_catalog, raw_items = extract_goods_via_cmd(catalog, cmd_config, config)
+    else:
+        raise ValueError(f"Unknown image recognition provider: {provider}")
+        
+    if not is_catalog:
         return False, []
         
+    # 通用后处理逻辑，格式化并映射回数据库所需字典列表
     extracted_items = []
-    for item in result.items:
+    for item in raw_items:
+        if isinstance(item, dict):
+            normalized = fuzzy_normalize_item(item)
+        else:
+            name = getattr(item, "name", "")
+            item_type = getattr(item, "type", "")
+            price = getattr(item, "price", 0)
+            is_set = getattr(item, "is_set", False)
+            normalized = fuzzy_normalize_item({
+                "name": name,
+                "type": item_type,
+                "price": price,
+                "is_set": is_set
+            })
+        
         extracted_items.append({
             "circle_id": catalog["circle_id"],
             "catalog_id": catalog["id"],
-            "name": item.name,
-            "type": item.type,
-            "price": item.price,
-            "is_set": 1 if item.is_set else 0,
-            "raw_json": json.dumps(item.model_dump(), ensure_ascii=False)
+            "name": normalized["name"],
+            "type": normalized["type"],
+            "price": normalized["price"],
+            "is_set": 1 if normalized["is_set"] else 0,
+            "raw_json": json.dumps(normalized, ensure_ascii=False)
         })
         
     return True, extracted_items
@@ -195,7 +533,6 @@ def process_pending_catalogs(
 ):
     """扫描数据库中指定或所有 pending 品书并调用 LLM 进行提取"""
     config = load_config()
-    openai_config = config["openai"]
     
     # 确定要过滤的社团 ID 集合
     # 如果指定了任何筛选条件，调用 get_filtered_circle_ids 获得符合条件的 ID 集合
@@ -222,7 +559,7 @@ def process_pending_catalogs(
     for catalog in pending_list:
         catalog_id = catalog["id"]
         try:
-            is_catalog, goods_list = extract_goods_from_catalog(catalog, openai_config)
+            is_catalog, goods_list = extract_goods_from_catalog(catalog, config)
             
             if not is_catalog:
                 print(f"Catalog {catalog_id} was classified as non-catalog or failed parsing. Ignoring.")

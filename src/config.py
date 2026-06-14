@@ -16,7 +16,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         "twitter": {
             "cookies_file": os.environ.get("TWITTER_COOKIES_FILE", "data/twitter_cookies.json"),
             "cookie_string": os.environ.get("TWITTER_COOKIE_STRING", ""),
-            "since_date": os.environ.get("TWITTER_SINCE_DATE", "")
+            "since_date": os.environ.get("TWITTER_SINCE_DATE", ""),
+            "until_date": os.environ.get("TWITTER_UNTIL_DATE", "")
         },
         "openai": {
             "api_key": os.environ.get("OPENAI_API_KEY", ""),
@@ -28,6 +29,15 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
             "api_key": os.environ.get("TWEET_ANALYSIS_API_KEY", ""),
             "base_url": os.environ.get("TWEET_ANALYSIS_BASE_URL", ""),
             "model": os.environ.get("TWEET_ANALYSIS_MODEL", "")
+        },
+        "image_recognition": {
+            "provider": os.environ.get("IMAGE_RECOGNITION_PROVIDER", "openai"),
+            "cmd": {
+                "command": os.environ.get("IMAGE_RECOGNITION_CMD", "agy"),
+                "args": ["-p", "{prompt}"],
+                "timeout": int(os.environ.get("IMAGE_RECOGNITION_CMD_TIMEOUT", "180")),
+                "fallback_text_formatter": os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER", "true").lower() == "true"
+            }
         }
     }
     
@@ -55,6 +65,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         config["twitter"]["cookie_string"] = os.environ.get("TWITTER_COOKIE_STRING")
     if os.environ.get("TWITTER_SINCE_DATE"):
         config["twitter"]["since_date"] = os.environ.get("TWITTER_SINCE_DATE")
+    if os.environ.get("TWITTER_UNTIL_DATE"):
+        config["twitter"]["until_date"] = os.environ.get("TWITTER_UNTIL_DATE")
     if os.environ.get("OPENAI_API_KEY"):
         config["openai"]["api_key"] = os.environ.get("OPENAI_API_KEY")
     if os.environ.get("OPENAI_BASE_URL"):
@@ -70,6 +82,18 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         config["tweet_analysis"]["base_url"] = os.environ.get("TWEET_ANALYSIS_BASE_URL")
     if os.environ.get("TWEET_ANALYSIS_MODEL"):
         config["tweet_analysis"]["model"] = os.environ.get("TWEET_ANALYSIS_MODEL")
+        
+    if os.environ.get("IMAGE_RECOGNITION_PROVIDER"):
+        config["image_recognition"]["provider"] = os.environ.get("IMAGE_RECOGNITION_PROVIDER")
+    if os.environ.get("IMAGE_RECOGNITION_CMD"):
+        config["image_recognition"]["cmd"]["command"] = os.environ.get("IMAGE_RECOGNITION_CMD")
+    if os.environ.get("IMAGE_RECOGNITION_CMD_TIMEOUT"):
+        try:
+            config["image_recognition"]["cmd"]["timeout"] = int(os.environ.get("IMAGE_RECOGNITION_CMD_TIMEOUT"))
+        except ValueError:
+            pass
+    if os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER"):
+        config["image_recognition"]["cmd"]["fallback_text_formatter"] = os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER").lower() == "true"
         
     # 智能回退策略（按字段独立 fallback）
     analysis = config["tweet_analysis"]
@@ -93,7 +117,8 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
         "twitter": {
             "cookies_file": "data/twitter_cookies.json",
             "cookie_string": "",
-            "since_date": "2026-06-01"
+            "since_date": "2026-06-01",
+            "until_date": "2026-06-05"
         },
         "openai": {
             "api_key": "your-openai-api-key-here",
@@ -105,6 +130,15 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
             "api_key": "your-analysis-api-key-here",
             "base_url": "https://api.openai.com/v1",
             "model": "gpt-4o-mini"
+        },
+        "image_recognition": {
+            "provider": "openai",
+            "cmd": {
+                "command": "agy",
+                "args": ["-p", "{prompt}"],
+                "timeout": 180,
+                "fallback_text_formatter": True
+            }
         }
     }
     with open(config_path, "w", encoding="utf-8") as f:

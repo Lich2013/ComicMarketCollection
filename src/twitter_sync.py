@@ -153,7 +153,7 @@ def is_potential_catalog(text: str, circle: dict = None) -> bool:
                         
     return False
 
-def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None, since_date: str = None) -> list[dict]:
+def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None, since_date: str = None, until_date: str = None) -> list[dict]:
     """使用 Playwright 抓取作者推文，优先通过 API 拦截，备用 DOM 解析，并进行严格多维度过滤"""
     tweets_data = []
     
@@ -222,6 +222,20 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                 date_threshold = datetime.fromisoformat(f"{since_date}T00:00:00+00:00")
             except Exception:
                 date_threshold = datetime.fromisoformat("2026-06-01T00:00:00+00:00")
+
+            if not until_date:
+                try:
+                    config = load_config()
+                    until_date = config["twitter"].get("until_date") or "2026-06-05"
+                except Exception:
+                    until_date = "2026-06-05"
+            try:
+                if "T" in until_date:
+                    until_threshold = datetime.fromisoformat(until_date)
+                else:
+                    until_threshold = datetime.fromisoformat(f"{until_date}T00:00:00+00:00")
+            except Exception:
+                until_threshold = datetime.fromisoformat("2026-06-05T00:00:00+00:00")
 
             # 3. 滚动页面以加载更多推文并触发 API 响应 (对于高频推文用户，滚动较深以能追溯到 threshold)
             for i in range(10):
@@ -372,6 +386,8 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                                     tweet_date = None
                                     
                                 if tweet_date:
+                                    if tweet_date > until_threshold:
+                                        continue
                                     # Pinned tweet (either entry starts with pinnedEntry or it came from TimelinePinEntry)
                                     is_pinned = entry_id.startswith("pinnedEntry-") or inst_type == "TimelinePinEntry"
                                     if not is_pinned and tweet_date < date_threshold:
@@ -449,6 +465,8 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                         if social_context and ("置顶" in social_context.inner_text() or "Pinned" in social_context.inner_text()):
                             is_pinned = True
                         
+                        if tweet_date > until_threshold:
+                            continue
                         if not is_pinned and tweet_date < date_threshold:
                             break
                         if is_pinned and tweet_date < date_threshold:
@@ -518,7 +536,8 @@ def sync_circle_twitter(circle: dict, cookies: list[dict] = None, db_path: str =
     print(f"--- Starting Twitter sync for Circle '{circle.get('name')}' (@{username}) ---")
     config = load_config()
     since_date = config["twitter"].get("since_date")
-    tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle, since_date=since_date)
+    until_date = config["twitter"].get("until_date")
+    tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle, since_date=since_date, until_date=until_date)
     print(f"Found {len(tweets)} potential catalog tweets for @{username}.")
     
     # Apply LLM text pre-filtering if enabled
