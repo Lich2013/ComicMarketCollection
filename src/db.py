@@ -69,7 +69,87 @@ def init_db(db_path: str = DEFAULT_DB_PATH):
             )
         """)
         
+        # 4. 创建 cp31_products 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cp31_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doujinshi_id INTEGER UNIQUE,
+                name TEXT NOT NULL,
+                theme_alias TEXT,
+                type TEXT,
+                sell_status TEXT,
+                hot_count INTEGER DEFAULT 0,
+                day_label TEXT,
+                circle_id INTEGER,
+                tags TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 5. 创建 cp31_circles 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cp31_circles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                circle_id INTEGER UNIQUE,
+                name TEXT NOT NULL,
+                position_name TEXT,
+                position TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 6. 创建 c107_circles 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS c107_circles (
+                id INTEGER PRIMARY KEY,
+                circle_id INTEGER,
+                name TEXT NOT NULL,
+                author TEXT,
+                genre TEXT,
+                description TEXT,
+                hall TEXT,
+                day TEXT,
+                block TEXT,
+                space TEXT,
+                twitter_url TEXT,
+                twitter_username TEXT,
+                pixiv_url TEXT,
+                circle_cut_url TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 7. 创建 cpsp_products 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cpsp_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doujinshi_id INTEGER UNIQUE,
+                name TEXT NOT NULL,
+                theme_alias TEXT,
+                type TEXT,
+                sell_status TEXT,
+                hot_count INTEGER DEFAULT 0,
+                day_label TEXT,
+                circle_id INTEGER,
+                tags TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 8. 创建 cpsp_circles 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cpsp_circles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                circle_id INTEGER UNIQUE,
+                name TEXT NOT NULL,
+                position_name TEXT,
+                position TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         conn.commit()
+
 
 # --- CRUD 辅助函数 ---
 

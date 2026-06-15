@@ -1,0 +1,10 @@
+
+
+*简析*：男性向题材以绝对优势雄踞榜首。《蔚蓝档案》（Blue Archive）和 VTuber 分列二、三名，游戏（社交/网络）紧随其后。从 C107 到 C108，前十题材名录几乎完全重合，仅有微幅的内部排位轮动，反映出日本成熟同人市场内部 IP 生命周期的长效稳定性。
+
+### 2.3 物理空间分布的规整度：Global Moran's I 莫兰指数对比
+
+Comiket 采用经典的线性排位（按 Hall、Block、Space 编排）。下表展示了主要题材在展馆中的物理空间集聚指数。关于莫兰指数（Moran's I）的空间自相关模型、期望值 $E(I)$ 以及邻近权重矩阵的定义，请参阅物理布局专项分析报告 [booth_density.md](file:///Users/lich/work/comicMarketCollection/research/booth_density.md#2.1)。
+
+| 题材名称 (Genre) | C107 Moran's I 指数 (期望值 / 观测值) | C108 Moran's I 指数 (期望值 / 观测值) | 空间集聚判定与比较 |
+| :--- | :--- | :--- | :--- |

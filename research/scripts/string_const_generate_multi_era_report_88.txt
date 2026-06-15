@@ -1,0 +1,13 @@
+%) 中展现出高度的时序稳定性。这证明了无料交换（以自制物免费赠送或对等互换）是中国同人圈层一种固化的“非商业社群资本交换”仪式，不随展会规模或季节而波动。
+- **合志 (Anthology)** 占比在 5% 到 6% 左右，体现了多作者社群协作的稳定程度。
+
+### 3.5 真实意愿供需偏离度 (Supply-Demand Index, SDI) 与蛛网效应分析
+
+基于 Allcpp `hotCount` (心愿单收藏数) 作为真实需求，制品数占比作为供给，计算题材的动态供需偏离度：
+
+$$\text{SDI} = \frac{\text{制品供给占比}}{\text{心愿单需求占比}}$$
+
+与日本 Comiket 分析中所使用的静态同人偏离度指数（Original DBI，参见 [genre_distribution.md](file:///Users/lich/work/comicMarketCollection/research/genre_distribution.md#1.4.2) 及 [audience_baseline_methodology.md](file:///Users/lich/work/comicMarketCollection/research/audience_baseline_methodology.md)）不同，中国 Comicup 的供需关系采用动态的“供需偏离度 (SDI)”进行测算，以反映即时的市场供求匹配度。当 SDI < 1.0 时为“供不应求”，SDI > 1.0 时为“供过于求”。
+
+| 核心比对题材 | CPSP 偏离度 (SDI) 与供需比 | CP31 偏离度 (SDI) 与供需比 | 生态现象与经济学蛛网模型解释 |
+| :--- | :--- | :--- | :--- |

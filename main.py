@@ -73,9 +73,49 @@ def main():
         help="导出解析到的商品数据为 CSV 文件 (如: data/goods.csv)"
     )
     parser.add_argument(
+        "--analyze-genres",
+        type=str,
+        help="统计分析社团题材与受众偏离度分布并导出为 JSON (如: data/genre_analysis.json)"
+    )
+    parser.add_argument(
+        "--import-cp31",
+        type=str,
+        help="导入 CP31 day1/day2 原始 JSON 数据包文件夹 (如: /Users/lich/Downloads/cpp)"
+    )
+    parser.add_argument(
+        "--import-c107",
+        type=str,
+        help="导入 C107 原始 JSON 数据包文件夹 (如: /Users/lich/work/c107/data/2025-12-20)"
+    )
+    parser.add_argument(
+        "--import-cpsp",
+        type=str,
+        help="导入 CPSP 原始 JSON 数据包文件夹 (如: /Users/lich/Downloads/cpp/cpsp)"
+    )
+    parser.add_argument(
+        "--analyze-cp31",
+        action="store_true",
+        help="执行 CP31 与 Comiket (C108) 的多维度比较分析并生成研究报告"
+    )
+    parser.add_argument(
+        "--analyze-multi-era",
+        action="store_true",
+        help="执行 C107、C108、CPSP、CP31 的多展期联合比较分析并自动生成研究报告"
+    )
+    parser.add_argument(
+        "--analyze-semantics",
+        action="store_true",
+        help="执行社团简介语义特征分析并自动生成研究报告"
+    )
+    parser.add_argument(
         "--force", 
         action="store_true", 
         help="强制更新，即使数据已在数据库中存在也不跳过"
+    )
+    parser.add_argument(
+        "--generate-charts",
+        action="store_true",
+        help="编译生成并输出五个主要设计蓝图的可视化静态图表到 research/images/ 目录"
     )
     
     args = parser.parse_args()
@@ -205,6 +245,80 @@ def main():
             name_query=circle_name,
             db_path=args.db_path
         )
+
+    # 7. 题材及受众分析统计
+    if args.analyze_genres:
+        init_db(args.db_path)
+        print(f"Starting genre & audience analysis, exporting to: {args.analyze_genres}...")
+        from src.analytics import calculate_genre_distribution
+        calculate_genre_distribution(db_path=args.db_path, output_path=args.analyze_genres)
+
+    # 8. 导入 CP31 数据
+    if args.import_cp31:
+        print(f"Starting CP31 data import from directory: {args.import_cp31}...")
+        from src.cp31_importer import import_cp31_dataset
+        import_cp31_dataset(args.import_cp31, db_path=args.db_path)
+
+    # 8.1 导入 C107 数据
+    if args.import_c107:
+        print(f"Starting C107 data import from directory: {args.import_c107}...")
+        from src.c107_importer import import_c107_dataset
+        import_c107_dataset(args.import_c107, db_path=args.db_path)
+
+    # 8.2 导入 CPSP 数据
+    if args.import_cpsp:
+        print(f"Starting CPSP data import from directory: {args.import_cpsp}...")
+        from src.cpsp_importer import import_cpsp_dataset
+        import_cpsp_dataset(args.import_cpsp, db_path=args.db_path)
+
+    # 9. 分析 CP31 数据并生成中日对比报告
+    if args.analyze_cp31:
+        print("Starting CP31 comparative analysis and report generation...")
+        from src.cp31_analyzer import get_cp31_stats, generate_cp31_comparison_report
+        stats = get_cp31_stats(db_path=args.db_path)
+        if "error" in stats:
+            print(f"Error: {stats['error']}")
+            sys.exit(1)
+        generate_cp31_comparison_report(stats, db_path=args.db_path)
+
+    # 10. 执行多展期联合比较分析并生成研究报告
+    if args.analyze_multi_era:
+        print("Starting multi-era comparative analysis and report generation...")
+        from src.multi_era_analyzer import run_multi_era_analysis, generate_multi_era_report
+        try:
+            stats = run_multi_era_analysis(db_path=args.db_path)
+            generate_multi_era_report(stats, output_path="research/comiket_vs_comicup_multi_era_study.md")
+            print("Auto-generating/updating charts for multi-era study...")
+            from src.visualizer import generate_all_charts
+            generate_all_charts(db_path=args.db_path, multi_era_stats=stats)
+        except Exception as e:
+            print(f"Error during multi-era analysis: {e}")
+            sys.exit(1)
+
+    # 11. 执行社团简介语义特征分析并自动生成研究报告
+    if args.analyze_semantics:
+        print("Starting circle description semantic analysis and report generation...")
+        from src.semantic_analyzer import run_semantic_analysis, generate_semantic_report
+        try:
+            stats = run_semantic_analysis(db_path=args.db_path)
+            generate_semantic_report(stats, output_path="research/semantic_description.md")
+            print("Auto-generating/updating charts for semantic analysis...")
+            from src.visualizer import generate_all_charts
+            generate_all_charts(db_path=args.db_path, semantic_stats=stats)
+        except Exception as e:
+            print(f"Error during semantic analysis: {e}")
+            sys.exit(1)
+
+    # 12. 独立调用图表生成
+    if args.generate_charts:
+        print("Starting static visualization charts generation...")
+        from src.visualizer import generate_all_charts
+        try:
+            generate_all_charts(db_path=args.db_path)
+            print("Successfully completed charts generation.")
+        except Exception as e:
+            print(f"Error generating charts: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

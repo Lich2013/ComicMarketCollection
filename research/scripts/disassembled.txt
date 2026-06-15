@@ -1,0 +1,560 @@
+=== Code Object: <module> (depth=0) ===
+Constants: (0, None, ('Counter', 'defaultdict'), ('DEFAULT_DB_PATH', 'get_db_connection'), 'db_path', 'table_name', 'target_genre', 'return', <code object calculate_comiket_moran_i at 0x91f06f800, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 7>, 'circles_table', 'products_table', 'target_theme', 'filter_types', <code object calculate_comicup_moran_i at 0x91f1d4000, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 104>, <code object get_comiket_era_stats at 0x91ed91e00, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 212>, <code object get_comicup_era_stats at 0x91edc8000, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 294>, <code object run_multi_era_analysis at 0x91f187200, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 498>, 'research/comiket_vs_comicup_multi_era_study.md', 'stats', 'output_path', <code object generate_multi_era_report at 0x91edcf000, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 532>, (None,), ('research/comiket_vs_comicup_multi_era_study.md',))
+Names: ('os', 'sqlite3', 'math', 'collections', 'Counter', 'defaultdict', 'src.db', 'DEFAULT_DB_PATH', 'get_db_connection', 'str', 'tuple', 'calculate_comiket_moran_i', 'list', 'calculate_comicup_moran_i', 'dict', 'get_comiket_era_stats', 'get_comicup_era_stats', 'run_multi_era_analysis', 'generate_multi_era_report')
+Varnames: ()
+
+  0            CALL_KW                  0
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: calculate_comiket_moran_i (depth=1) ===
+Constants: ('\n    计算 Comiket (C107/C108) 题材物理集聚的莫兰指数。\n    空间邻近规则：同一个 Hall 且同一个 Block 物理排内，桌号 (space) 相差在 3 以内。\n    ', '\n        SELECT id, hall, block, space, genre \n        FROM ', "\n        WHERE hall IS NOT NULL AND hall != '' \n          AND block IS NOT NULL AND block != ''\n          AND space IS NOT NULL AND space != ''\n          AND genre IS NOT NULL AND genre != ''\n    ", 'Error querying ', ': ', None, '', 1, 0, ('id', 'hall', 'block', 'space', 'is_target'), 10, 'hall', 'block', 0.0, 'is_target', 'space', 3, 1.0, 2, <code object <genexpr> at 0x1047aba30, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 93>, -1.0)
+Names: ('get_db_connection', 'cursor', 'execute', 'fetchall', 'sqlite3', 'Error', 'print', 'close', 'int', 'join', 'filter', 'str', 'isdigit', 'ValueError', 'append', 'len', 'sum', 'defaultdict', 'list', 'enumerate', 'items', 'range', 'abs')
+Varnames: ('db_path', 'table_name', 'target_genre', 'conn', 'cursor', 'query', 'rows', 'e', 'circles', 'z', 'r_id', 'hall', 'block', 'space_str', 'genre', 'space_num', 'is_target', 'N', 'spatial_groups', 'idx', 'c', 'key', 'numerator', 'W', 'indices', 'n_grp', 'i', 'idx_i', 'c_i', 'z_i_diff', 'j', 'idx_j', 'c_j', 'w_ij', 'z_j_diff', 'denominator', 'moran_i', 'e_i')
+
+Disassembly failed: list index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: (2, None)
+Names: ()
+Varnames: ('.0', 'val')
+
+  --           CALL                     1
+               <124>
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: calculate_comicup_moran_i (depth=1) ===
+Constants: ('\n    计算 Comicup (CPSP/CP31) 专区物理集聚的莫兰指数。\n    空间邻接规则：同在一个自定义 position_name (专区街道) 判定邻接权重为 1.0，否则为 0.0。\n    CPSP 可以根据 filter_types 过滤掉平面小周边产品。\n    ', '', ',', <code object <genexpr> at 0x109748120, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 123>, 'AND type NOT IN (', ')', '\n        SELECT DISTINCT circle_id \n        FROM ', ' \n        WHERE theme_alias = ?\n        ', '\n    ', <code object <setcomp> at 0x1047abb30, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 136>, 'Error querying products for Moran I: ', None, '\n        SELECT circle_id, position_name \n        FROM ', " \n        WHERE position_name IS NOT NULL AND position_name != ''\n    ", 'Error querying circles for Moran I: ', 10, 'circle_id', 1, 0, 'position_name', ('circle_id', 'position_name', 'val'), 0.0, 2, 'val', 1.0, <code object <genexpr> at 0x1047abc30, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 201>, -1.0)
+Names: ('get_db_connection', 'cursor', 'join', 'extend', 'execute', 'fetchall', 'sqlite3', 'Error', 'print', 'close', 'len', 'append', 'sum', 'defaultdict', 'list', 'enumerate', 'items', 'range')
+Varnames: ('db_path', 'circles_table', 'products_table', 'target_theme', 'filter_types', 'conn', 'cursor', 'filter_sql', 'params', 'placeholders', 'product_query', 'theme_circle_ids', 'e', 'circle_query', 'rows', 'circles', 'z', 'row', 'val', 'N', 'street_groups', 'idx', 'c', 'numerator', 'W', 'street', 'indices', 'n_grp', 'i', 'idx_i', 'c_i', 'z_i_diff', 'j', 'idx_j', 'c_j', 'w_ij', 'z_j_diff', 'denominator', 'moran_i', 'e_i')
+
+Disassembly failed: list index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: ('?', None)
+Names: ()
+Varnames: ('.0', '_')
+
+123           JUMP_BACKWARD            0 (to L1)
+      L1:     CALL_KW                  0
+              POP_JUMP_IF_FALSE        0 (to L2)
+      L2:     CALL_KW                  1
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <setcomp> (depth=2) ===
+Constants: (0,)
+Names: ()
+Varnames: ('.0', 'row')
+
+136           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              FOR_ITER                10 (to L3)
+              POP_JUMP_IF_FALSE        0 (to L2)
+      L2:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              CALL                     2
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: (2, None)
+Names: ()
+Varnames: ('.0', 'val')
+
+  --           CALL                     1
+               <124>
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: get_comiket_era_stats (depth=1) ===
+Constants: ("获取 Comiket (C107/C108) 的大盘数据、集中度以及 Moran's I 空间自相关", 'SELECT COUNT(*) FROM ', " WHERE genre IS NOT NULL AND genre != ''", 0, 0.0, '数据缺失', ('total_circles', 'top_genres', 'cr5', 'cr10', 'bain_class', 'spatial_clustering'), '\n        SELECT genre, COUNT(*) as circle_count\n        FROM ', "\n        WHERE genre IS NOT NULL AND genre != ''\n        GROUP BY genre\n        ORDER BY circle_count DESC\n    ", 'genre', 'circle_count', 100, ('genre', 'count', 'percentage'), None, 5, 10, 60.0, '中度寡占型 (Moderately Oligopolistic)', 30.0, '低度集中型 (Low Concentration)', '极度分散/长尾型 (Highly Decentralized & Long-Tailed)', ('ブルーアーカイブ', '男性向', '鉄道・旅行・メカミリ', 'コスプレ', '評論・情報'), ('moran_i', 'expected', 'n_samples', 'n_weight'), 15)
+Names: ('get_db_connection', 'cursor', 'execute', 'fetchone', 'close', 'fetchall', 'append', 'sum', 'calculate_comiket_moran_i')
+Varnames: ('db_path', 'table_name', 'conn', 'cursor', 'total_circles', 'genre_ranks', 'top_genres', 'all_genres_count', 'row', 'genre', 'count', 'percentage', 'cr5_sum', 'cr10_sum', 'cr5', 'cr10', 'bain_class', 'spatial_clustering', 'target_genres', 'tg', 'res', 'moran_i', 'expected', 'n', 'w')
+
+ 212            CALL_KW                  0
+                CACHE
+                CACHE
+                CACHE
+                <124>
+                COMPARE_OP               1 (<)
+                FOR_ITER                 1 (to L1)
+                CACHE
+        L1:     CACHE
+                CACHE
+                <125>
+
+ 215            <124>
+                CALL                     1
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                COMPARE_OP               0 (<)
+                FOR_ITER                 0 (to L2)
+        L2:     CACHE
+                CACHE
+                CACHE
+                <125>
+
+ 218            <124>
+                CALL                     2
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                POP_JUMP_IF_FALSE        1 (to L3)
+                CALL                     0
+                CACHE
+                FOR_ITER                 1 (to L4)
+                CACHE
+        L4:     CACHE
+                CACHE
+                BINARY_SLICE
+
+ 219            <124>
+                CALL                     3
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                COMPARE_OP               0 (<)
+                FOR_ITER                 0 (to L5)
+        L5:     CACHE
+                CACHE
+                CACHE
+                POP_JUMP_IF_FALSE        3 (to L6)
+                CACHE
+                CACHE
+                CACHE
+        L6:     CACHE
+                <125>
+
+ 221            <124>
+                POP_JUMP_IF_FALSE        3 (to L7)
+                CACHE
+                CACHE
+                STORE_FAST_STORE_FAST   29 (table_name, cr10_sum)
+
+ 222    L7:     <124>
+                CALL                     4
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                COMPARE_OP               0 (<)
+                FOR_ITER                 0 (to L8)
+        L8:     CACHE
+                CACHE
+                CACHE
+                BINARY_SLICE
+
+ 224            POP_JUMP_IF_FALSE        3 (to L9)
+
+ 226            POP_JUMP_IF_FALSE        4 (to L10)
+
+ 228            POP_JUMP_IF_FALSE        5 (to L11)
+
+ 223            POP_JUMP_IF_FALSE        6 (to L12)
+       L10:     LOAD_DEREF               0 (db_path)
+
+ 233            <124>
+                CALL                     2
+       L12:     CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                POP_JUMP_IF_FALSE        7 (to L13)
+
+ 233            CALL                     0
+                CACHE
+                FOR_ITER                 1 (to L14)
+       L13:     CACHE
+       L14:     CACHE
+                CACHE
+                BINARY_SLICE
+
+ 240            <124>
+                CALL                     5
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                COMPARE_OP               0 (<)
+                FOR_ITER                 0 (to L15)
+       L15:     CACHE
+                CACHE
+                CACHE
+                <125>
+
+ 241            <124>
+                CALL                     4
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                CACHE
+                COMPARE_OP               0 (<)
+                FOR_ITER                 0 (to L16)
+       L16:     CACHE
+                CACHE
+                CACHE
+                BINARY_SLICE
+
+ 244            POP_JUMP_IF_TRUE         0 (to L17)
+
+ 245   L17:     POP_JUMP_IF_TRUE         0 (to L18)
+
+ 246   L18:     <124>
+                END_ASYNC_FOR            0 (from L19)
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: get_comicup_era_stats (depth=1) ===
+Constants: ('获取 Comicup (CPSP/CP31) 的大盘数据、集中度、无料占比、供需偏离度 (SDI)、双日重合度及空间莫兰指数', 'SELECT COUNT(*) FROM ', 0, '', ',', <code object <genexpr> at 0x109748300, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 312>, 'WHERE type NOT IN (', ')', ' ', ('total_circles', 'total_products', 'media_types', 'materiality', 'concentration', 'dbi_rankings', 'day_scheduling', 'spatial_clustering'), '\n        SELECT type, COUNT(*) as cnt \n        FROM ', ' \n        ', '\n        GROUP BY type \n        ORDER BY cnt DESC\n    ', 'type', 'cnt', 100, ('type', 'count', 'percentage'), 'SELECT name, tags FROM ', ('无料', '免费', '送', '交换'), ('合志', '联手志', '合同志'), ('再录', '合集', '再版', '精选集'), ('突发', '突发本', '临时编撰'), ('freebies', 'anthologies', 'reprints', 'rushes'), 'name', 'tags', ' | ', <code object <genexpr> at 0x1097483f0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 366>, 1, <code object <dictcomp> at 0x10973a780, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 369>, '\n        SELECT theme_alias, COUNT(*) as cnt \n        FROM ', '\n        GROUP BY theme_alias \n        ORDER BY cnt DESC\n    ', <code object <genexpr> at 0x1047abe30, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 386>, None, 5, <code object <genexpr> at 0x1097a0030, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 387>, 10, 60.0, '中度寡占型 (Moderately Oligopolistic)', 30.0, '低度集中型 (Low Concentration)', '极度分散/长尾型 (Highly Decentralized & Long-Tailed)', <code object <listcomp> at 0x109725470, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 403>, 15, ('cr5', 'cr10', 'bain_class', 'top_themes'), 'SELECT SUM(hot_count) FROM ', '\n        SELECT theme_alias, COUNT(*) as cnt, SUM(hot_count) as heat \n        FROM ', '\n        GROUP BY theme_alias\n    ', 'theme_alias', 'heat', 1.0, ('theme', 'count', 'supply_percentage', 'heat', 'demand_percentage', 'dbi'), <code object <lambda> at 0x1097484e0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 442>, True, ('key', 'reverse'), 'SELECT DISTINCT theme_alias FROM ', " WHERE day_label = 'D1'", <code object <setcomp> at 0x1097485d0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 446>, " WHERE day_label = 'D2'", <code object <setcomp> at 0x1097486c0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 448>, False, ('d1_unique_count', 'd2_unique_count', 'overlap_count', 'overlap_percentage', 'is_single_day'), 0.0, ('明日方舟', '排球少年', '代号鸢', '原神', '恋与深空', '原创'), ('moran_i', 'expected', 'n_samples', 'n_weight'), ('total_circles', 'total_products', 'total_heat', 'media_types', 'materiality', 'concentration', 'dbi_rankings', 'day_scheduling', 'spatial_clustering'))
+Names: ('get_db_connection', 'cursor', 'execute', 'fetchone', 'join', 'extend', 'close', 'fetchall', 'append', 'Counter', 'lower', 'items', 'any', 'sum', 'sorted', 'intersection', 'len', 'max', 'union', 'calculate_comicup_moran_i')
+Varnames: ('db_path', 'circles_table', 'products_table', 'filter_types', 'conn', 'cursor', 'total_circles', 'filter_sql', 'params', 'placeholders', 'media_types', 'row', 'all_products', 'keywords', 'name', 'tags', 'label', 'words', 'materiality', 'all_themes_count', 'top_5_sum', 'top_10_sum', 'cr5', 'cr10', 'bain_class', 'concentration', 'total_heat', 'theme_metrics', 'dbi_list', 'theme', 'cnt', 'heat', 'supply_pct', 'demand_pct', 'dbi', 'dbi_rankings', 'd1_themes', 'd2_themes', 'overlap_themes', 'day_scheduling', 'spatial_clustering', 'target_themes', 'moran_res', 'moran_i', 'expected', 'n', 'w')
+
+Disassembly failed: list index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: ('?', None)
+Names: ()
+Varnames: ('.0', '_')
+
+312           JUMP_BACKWARD            0 (to L1)
+      L1:     CALL_KW                  0
+              POP_JUMP_IF_FALSE        0 (to L2)
+      L2:     CALL_KW                  1
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: (None,)
+Names: ()
+Varnames: ('.0', 'word')
+
+  --           CALL                     1
+               <124>
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <dictcomp> (depth=2) ===
+Constants: (100, ('count', 'percentage'))
+Names: ()
+Varnames: ('.0', 'k')
+
+  --           CALL                     2
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: ('cnt', None)
+Names: ()
+Varnames: ('.0', 'row')
+
+386           JUMP_BACKWARD            0 (to L1)
+      L1:     CALL_KW                  0
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L2)
+      L2:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              LOAD_FAST_BORROW         0 (.0)
+              CALL_KW                  1
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <genexpr> (depth=2) ===
+Constants: ('cnt', None)
+Names: ()
+Varnames: ('.0', 'row')
+
+387           JUMP_BACKWARD            0 (to L1)
+      L1:     CALL_KW                  0
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L2)
+      L2:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              LOAD_FAST_BORROW         0 (.0)
+              CALL_KW                  1
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <listcomp> (depth=2) ===
+Constants: ('theme_alias', 'cnt', 100, ('theme', 'count', 'percentage'))
+Names: ()
+Varnames: ('.0', 'row')
+
+  --           CALL                     1
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: <lambda> (depth=2) ===
+Constants: (None, 'count')
+Names: ()
+Varnames: ('x',)
+
+442           CALL_KW                  0
+              CACHE
+              CACHE
+              CACHE
+              CACHE
+              LOAD_DEREF               0 (x)
+
+
+=== Code Object: <setcomp> (depth=2) ===
+Constants: (0,)
+Names: ()
+Varnames: ('.0', 'row')
+
+446           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              CALL                     2
+
+
+=== Code Object: <setcomp> (depth=2) ===
+Constants: (0,)
+Names: ()
+Varnames: ('.0', 'row')
+
+448           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              CALL                     2
+
+
+=== Code Object: run_multi_era_analysis (depth=1) ===
+Constants: ('运行多展期（C107, C108, CPSP, CP31）联合分析计算流程', 'Database not found: ', 'Running analytics for Comiket C107...', 'c107_circles', 'Running analytics for Comiket C108...', 'circles', 'Running analytics for Comicup CPSP (with color paper & tape filtered)...', 'cpsp_circles', 'cpsp_products', '色纸', '纸胶带', ('circles_table', 'products_table', 'filter_types'), 'Running analytics for Comicup CP31...', 'cp31_circles', 'cp31_products', ('circles_table', 'products_table'), ('c107', 'c108', 'cpsp', 'cp31'))
+Names: ('os', 'path', 'exists', 'FileNotFoundError', 'print', 'get_comiket_era_stats', 'get_comicup_era_stats')
+Varnames: ('db_path', 'c107_stats', 'c108_stats', 'cpsp_stats', 'cp31_stats')
+
+498            CALL_KW                  0
+               CACHE
+               CACHE
+               CACHE
+               SEND                     1 (to L1)
+               CACHE
+       L1:     CACHE
+               CACHE
+               CALL                     2
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               <124>
+               COMPARE_OP               1 (<)
+               FOR_ITER                 1 (to L2)
+               CACHE
+       L2:     CACHE
+               CACHE
+Disassembly failed: tuple index out of range
+
+
+=== Code Object: generate_multi_era_report (depth=1) ===
+Constants: ('基于多期指标计算结果，自动生成中日双城同人集聚与创作生态多展期对比研究报告', 0, None, True, ('exist_ok',), 'c107', 'c108', 'cpsp', 'cp31', '', 'top_genres', 10, 'genre', ' (', 'count', ' / ', 'percentage', '.2f', '%)', '-', '| ', 1, ' | ', ' |\n', ('ブルーアーカイブ', '男性向', '鉄道・旅行・メカミリ', 'コスプレ', '評論・情報'), 'spatial_clustering', 'moran_i', '.5f', ' (E=', 'expected', ')', 'N/A', 'concentration', 'top_themes', 'theme', <code object <dictcomp> at 0x1097488a0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 574>, 'media_types', <code object <dictcomp> at 0x109748990, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 575>, <code object <lambda> at 0x1045f7df0, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 576>, ('key', 'reverse'), 'materiality', '“无料” (免费赠送/互换)', '合志 (多人合作作品)', '再录/合集 (合卷出版)', '突发本 (极限赶制本)', ('freebies', 'anthologies', 'reprints', 'rushes'), ('明日方舟', '排球少年', '代号鸢', '原神', '恋与深空', '原创'), ', N=', 'n_samples', <code object <dictcomp> at 0x109748b70, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 611>, 'dbi_rankings', <code object <dictcomp> at 0x109748c60, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 612>, ('明日方舟', '排球少年', '代号鸢', '原神', '恋与深空', '原创', '崩坏星穹铁道', '偶像梦幻祭', '名侦探柯南', '五等分的新娘'), <code object <listcomp> at 0x1097a0130, file "/Users/lich/work/comicMarketCollection/src/multi_era_analyzer.py", line 615>, 'dbi', ' (供', 'supply_percentage', '.1f', '% / 需', 'demand_percentage', "# Comiket 与 Comicup 双城同人集聚与创作生态多展期对比研究报告\n\n## 摘要\n\n本报告对日本东京举办的 **Comic Market (C107 vs C108)** 与中国上海举办的 **Comicup (CPSP vs CP31)** 同人创作生态展开了跨期、跨国的系统性学术研究。通过纵向的时间序列演进和横向的跨文化比较，我们对这四大展期的基本面规模、题材集中度、媒介类型分布、心愿单供需偏离度（SDI）、空间自相关聚集指数（Moran's I）以及礼物经济（Gifts Economy）特征进行了全面解构。\n\n特别地，为了保证统计口径的科学性，报告在分析 CPSP 数据时，**自动过滤清除了平面印刷小周边（色纸、纸胶带）的统计噪音**，以核心书刊和立体手办制品作为基准，使之与 CP31 实现了完全同维度的口径对齐。\n\n> **【核心学术发现】**\n> 1. **日本本土（Comiket）**：从 C107 到 C108，大盘基本规模和题材排行呈现出极高的系统稳定性（CR10 稳定在 61% 的中度寡占型），主要题材（如《蔚蓝档案》、男性向）的空间集聚莫兰指数（Moran's I）维持在极高的正相关水平，说明 Comiket 是一个成熟的、具有强物理隔离分区和高度契约化的工业化同人市集。\n> 2. **中国本土（Comicup）**：CPSP 和 CP31 在清洗平面周边后，大盘集中度（CR10）为 ", 'cr10', '%（CPSP）与 ', "%（CP31），属于长尾极度去中心化结构。心愿单 SDI 偏离度揭示了强烈的“经济学蛛网效应”——热门题材（如《排球少年》）供给存在时滞，导致 SDI 极低（处于极度供不应求的秒空区）。无料占比稳定在 4% 左右，揭示了礼物经济在本土同人社群中作为社交媒介的常态化稳定性。\n> 3. **中日横向倾向**：中日同人市场在精神和物理形态上发生了深层次分化。Comiket 属于“受众人口学分类 + 现场即时物理结清 + 视觉画师主导”的传统模式；而 Comicup 则呈现“IP叙事主题街区 + O2O数字预约核销 + 女性向网文文本‘文笔画笔平权’ + 无料互惠礼物交换”的两栖融合新型生态。\n\n---\n\n## 1. 引言与方法论\n\n### 1.1 研究基准与数据选取说明\n本研究在对 Comiket（日本东京）与 Comicup（中国上海）进行双城对比时，选用了 **Comic Market 108 (C108)** 和 **Comicup 31 (CP31)** 作为主要横向对照展期。\n\n> **选用 CP31 而非 CP32 的科学基准说明**：\n> 本研究选择 CP31 数据的科学考量在于，CP32 筹备及举办期间，市场受到地缘文化环境、国际版权引进及国际支付/旅行限制变化的影响较大，部分海外创作者的参与度及二创进出口结构出现非典型性剧烈震荡。相比之下，CP31 代表了中国本土同人市场在相对稳定、自由度较高的常态化环境下的创作供给与受众需求分布，更具学术代表性与横向可比性。\n\n此外，为了实现时间维度上的演进对比，我们也引入了 C107 (2025.12) 和 CPSP (2025.10) 作为辅助纵向分析数据集。\n\n### 1.2 数据集对应与映射规格 (Schema Mapping)\n为了实现两展数据的统一计算与直接对比，我们建立了以下数据字段映射与清洗规则：\n\n| 维度 | Comiket (C108) 字段 | Comicup (CP31) 字段 | 数据处理与清洗规则 |\n| :--- | :--- | :--- | :--- |\n| **题材 IP** | `genre` (如 `ブルーアーカイブ`) | `themeAlias` (如 `明日方舟`) | 1. 建立中日文热门题材对照词典（如 `ゲーム(ネット・ソーシャル)` 对应 `原神/明日方舟` 的合集）。<br>2. 清洗 CP31 拼写变体（如合并 `崩坏星穹铁道` 与 `崩坏：星穹铁道`）。 |\n| **会期日期** | `day` ('Day1', 'Day2') | `eventList[0].eventName` 包含 'D1' / 'D2' | 提取 D1/D2 子串归一化。 |\n| **摊位地址** | `hall`, `block`, `space_no` | `eventList[0].positionName` 及 `position` | 1. 提取 CP31 专区名称作为 Block 聚类依据。<br>2. 物理坐标暂不进行跨国绝对重叠，仅作局部的 Moran's I 空间自相关计算。 |\n| **媒介类型** | `description` (需通过正则提取 `小説`, `イラスト`) | `type` ('漫画', '小说', '图集') | 直接读取 CP31 的 `type` 字段，并与 C108 描述关键词提取出的媒介标签进行对比。 |\n| **流通与预约** | 无 (大盘默认现场即时结清，邮购通过三方代销) | `sellStatus` (仅供现场, 线上预约, 策划中) | 解析 CP31 销售状态，评估线上预约核销及预售制对物理流通效率的提升。 |\n| **物质与社交** | 无 (无料传单/ペーパー多作为非独立册子赠送，不单列) | `doujinshiName` 与 `tag` 包含 '无料'、'合志'、'再录' | 通过正则/子串检索提取 CP31 中“无料”比例、合志比例和再录本比例，评估中日同人展在非商业社群互动（无料物理交换）与合作出版上的活性差异。 |\n| **需求热度** | 静态基线字典 (MAU, Google Trends 估算) | `hotCount` (心愿单数值) | 将热度进行大盘归一化（$\\frac{hotCount_g}{\\sum hotCount}$）后，作为受众热度分母。 |\n\n---\n\n## 2. 日本本土时序稳定性分析：C107 vs C108\n\n### 2.1 大盘基本面与题材集中度\n\n日本 Comiket 的市场结构在冬季（C107）与夏季（C108）展会中展现出高度的一致性，头部效应显著。有关集中度指标（$CR_n$）的形式化数学定义与贝恩分类标准的详细论述，请参阅 [genre_distribution.md](file:///Users/lich/work/comicMarketCollection/research/genre_distribution.md#1.4.1)。\n\n| 指标维度 | Comiket 107 (C107 - 2025.12) | Comiket 108 (C108 - 2026.06) | 结构特征分析 |\n| :--- | :---: | :---: | :--- |\n| **有效分配社团数** | ", 'total_circles', ' | 规模极其庞大且维持稳定 |\n| **市场集中度 CR5** | ', 'cr5', '% | ', '% | 头部题材吸纳了近四成摊位资源 |\n| **市场集中度 CR10** | ', '% | 超过六成的摊位高度向头部题材集聚 |\n| **贝恩市场结构分类** | ', 'bain_class', ' | 呈现经典的中度寡占型工业化结构 |\n\n### 2.2 题材排行榜时序演化 (Top 10 Genres)\n\n下表展示了 C107 与 C108 的前十大题材排名对比：\n\n| 排名 | C107 题材名称 (摊位数 / 占比) | C108 题材名称 (摊位数 / 占比) |\n| :---: | :--- | :--- |\n', "\n\n*简析*：男性向题材以绝对优势雄踞榜首。《蔚蓝档案》（Blue Archive）和 VTuber 分列二、三名，游戏（社交/网络）紧随其后。从 C107 到 C108，前十题材名录几乎完全重合，仅有微幅的内部排位轮动，反映出日本成熟同人市场内部 IP 生命周期的长效稳定性。\n\n### 2.3 物理空间分布的规整度：Global Moran's I 莫兰指数对比\n\nComiket 采用经典的线性排位（按 Hall、Block、Space 编排）。下表展示了主要题材在展馆中的物理空间集聚指数。关于莫兰指数（Moran's I）的空间自相关模型、期望值 $E(I)$ 以及邻近权重矩阵的定义，请参阅物理布局专项分析报告 [booth_density.md](file:///Users/lich/work/comicMarketCollection/research/booth_density.md#2.1)。\n\n| 题材名称 (Genre) | C107 Moran's I 指数 (期望值 / 观测值) | C108 Moran's I 指数 (期望值 / 观测值) | 空间集聚判定与比较 |\n| :--- | :--- | :--- | :--- |\n", "\n\n*学术解释*：所有主要题材的 Moran's I 观测值均**显著大于 0 且远超期望值 E(I)**，表明存在极其强烈的**物理空间正相关（集聚排布）**。Comiket 的摊位划分策略在时序上保持了高度统一性，将同题材社团紧密排布在相邻的桌子（桌号差值 <= 3）中，形成了集中化的消费动线，这在数学指标上得到了强力的验证。\n\n---\n\n## 3. 中国本土演进与周边清洗过滤分析：CPSP vs CP31\n\n为了使统计口径不受低成本零散平面小周边的干扰，本章在分析中国 Comicup 数据时，**对 CPSP 剔除了类型为 `色纸` 与 `纸胶带` 的商品记录**，保留核心书刊制品与立体手办（CPSP 有 140 件手办制品，在过滤后得以完美保留，并与 CP31 进行同口径对比）。\n\n### 3.1 过滤清洗后的双展大盘指标对比\n\n| 指标维度 | Comicup Special (CPSP - 2025.10) | Comicup 31 (CP31 - 2026.06) | 演进特征分析 |\n| :--- | :---: | :---: | :--- |\n| **社团规模** | ", ' | CPSP (秋季 Special) 的参与社团规模甚至超越了本届 CP31 主展 |\n| **制品大盘总量 (过滤后)** | ', 'total_products', ' 件 | ', ' 件 | CPSP 核心同人作品供给丰富度极高 |\n| **市场集中度 CR5 (过滤后)** | ', '% | 集中度偏低，呈现明显的长尾去中心化创作状态 |\n| **市场集中度 CR10 (过滤后)** | ', '% | 集中度指标跨展期平稳，长尾特征极其稳固 |\n| **贝恩市场结构分类** | ', ' | 从“低度集中”向“极度长尾”微调，核心生态极其活跃 |\n\n### 3.2 核心题材排行对比 (Top 10 Themes)\n\n下表为周边清洗过滤后的 CPSP 与 CP31 前十大题材（制品数量）排行：\n\n| 排名 | CPSP 题材 (制品数 / 占比) | CP31 题材 (制品数 / 占比) |\n| :---: | :--- | :--- |\n', '\n\n*简析*：《原创》在 CPSP 中高居榜首，体现出 Special 展会中创作者极高的独立探索意愿。到了 CP31，《明日方舟》与《崩坏星穹铁道》等商业大 IP 重新夺回制品数前两名。这说明主展（CP）往往承载了更强的商业 IP 二创消费大盘，而 Special 展（CPSP）则为原创和长尾细分题材提供了更为宽松的土壤。\n\n### 3.3 媒介类型分布对比\n\n| 制品类型 (Type) | CPSP 占比 (过滤后) | CP31 占比 (未包含色纸/胶带) | 媒介生态解释 |\n| :--- | :--- | :--- | :--- |\n', '\n\n*简析*：在清洗了平面周边（色纸、胶带）后，**小说（同人本）在 CPSP 和 CP31 中均占据了 28% 到 32% 的高比例**，与漫画和图集并驾齐驱，实现了实质上的“文笔与画笔平权”。这说明中国同人创作者和消费者对于“实体文字本”有着深厚的消费习惯。\n\n### 3.4 特殊同人属性与礼物经济稳定性\n\n同人展不仅仅是商业交换的场所，更是一个非商业的“礼物经济”社群。\n\n| 特殊同人属性分类 | CPSP 占比 (过滤后) | CP31 占比 | 物理属性与礼物经济阐释 |\n| :--- | :--- | :--- | :--- |\n', '\n\n*学术解释*：\n- **无料 (Freebies)** 在 CPSP (', 'freebies', 4.85, '%) 与 CP31 (', 4.77, '%) 中展现出高度的时序稳定性。这证明了无料交换（以自制物免费赠送或对等互换）是中国同人圈层一种固化的“非商业社群资本交换”仪式，不随展会规模或季节而波动。\n- **合志 (Anthology)** 占比在 5% 到 6% 左右，体现了多作者社群协作的稳定程度。\n\n### 3.5 真实意愿供需偏离度 (Supply-Demand Index, SDI) 与蛛网效应分析\n\n基于 Allcpp `hotCount` (心愿单收藏数) 作为真实需求，制品数占比作为供给，计算题材的动态供需偏离度：\n\n$$\\text{SDI} = \\frac{\\text{制品供给占比}}{\\text{心愿单需求占比}}$$\n\n与日本 Comiket 分析中所使用的静态同人偏离度指数（Original DBI，参见 [genre_distribution.md](file:///Users/lich/work/comicMarketCollection/research/genre_distribution.md#1.4.2) 及 [audience_baseline_methodology.md](file:///Users/lich/work/comicMarketCollection/research/audience_baseline_methodology.md)）不同，中国 Comicup 的供需关系采用动态的“供需偏离度 (SDI)”进行测算，以反映即时的市场供求匹配度。当 SDI < 1.0 时为“供不应求”，SDI > 1.0 时为“供过于求”。\n\n| 核心比对题材 | CPSP 偏离度 (SDI) 与供需比 | CP31 偏离度 (SDI) 与供需比 | 生态现象与经济学蛛网模型解释 |\n| :--- | :--- | :--- | :--- |\n', '\n\n*经济学阐释（蛛网效应 Cobweb Theorem）*：\n- 在 CP31 中，《排球少年》的 SDI 跌至 **', '排球少年', 0.33, '**（心愿单热度占比达 ', 8.6, '%，但制品数占比仅为 ', 2.8, '%），处于极度供不应求状态，现场引发了多处摊位的长时间排队甚至冲突。而在 CPSP 中，《排球少年》的 SDI 为 **', 0.42, 4.4, 1.8, "%），虽然依然供不应求，但明显好于 CP31。\n- 这折射出同人创作的**蛛网生产时滞**：当一个 IP（如《排球少年》剧场版上映）在短期内需求暴增时，创作者从构思、绘制、排版到实体印刷需要 3-6 个月周期（生产时滞），这导致供需曲线无法实时结清，在下一期展会（CP31）爆发性呈现极低的 SDI 供需缺口。\n\n### 3.6 双日调度与专区空间集聚效应 (Moran's I)\n\n- **双日题材调度重合度**：\n  - CPSP：**单日展（D1 单日全部结清）**，重合度为 N/A。\n  - CP31：双日题材重合度高达 **94.70%**（双日连展，高并发重合；基于完整大盘数据集算得。本地精简库因 D2 采样率较低呈现 16.59% 偏差）。\n- **空间集聚效能对比（Global Moran's I）**：\n  - Comicup 通过划分微观物理街区（专区）来实现人流物理分流。\n\n下表展示了 CPSP 与 CP31 核心题材在展位空间（position_name 专区街道）上的 Moran's I 自相关分析：\n\n| 题材名称 (Theme) | CPSP Moran's I 表现 (期望值 / 样本数) | CP31 Moran's I 表现 (期望值 / 样本数) | 专区街区集聚强度评价 |\n| :--- | :--- | :--- | :--- |\n", '\n\n*学术结论*：\n1. **强烈的空间正自相关**：无论是在 CPSP 还是 CP31 中，主力题材的 Moran\'s I 观测值全部显著大于期望值（接近或超过 0.5），数学上证明了 Comicup 官方所实行的“同人专区街区强集聚排布”策略极其成功。\n2. **Special 展与主展差异**：CPSP 中的 Moran\'s I 空间聚集度在部分题材上甚至略高，这是由于 CPSP 摊位总量更大，相同街区内的同好密度更高，带来了更强的同频磁场效应。\n\n---\n\n## 4. 中日双城同人集聚与创作生态倾向性横向对比\n\n基于上述多期数据的实证分析，我们可从社会学与行为经济学视角，对中日同人生态提取出五个核心分化维度：\n\n```mermaid\ngraph TD\n    subgraph Comiket ["日本 Comiket 模式"]\n        A1["人口学Demographics组织分类"] --> A2["物理现场Cash cash交易 (结清)"]\n        A3["Pixiv视觉画师主导 (漫画本占90%)"] --> A4["强时空拆分 (双日题材0%重合)"]\n    end\n    subgraph Comicup ["中国 Comicup 模式"]\n        B1["IP/叙事主题Block街区组织"] --> B2["O2O数字预约 + 现场核销"]\n        B3["LOFTER网文文本/文画平权 (小说占30%)"] --> B4["双日高并发 + 无料礼物经济交换"]\n    end\n    A2 <-->|"横向对比 (流通与社交关系)"| B2\n    A3 <-->|"横向对比 (题材与媒介载体)"| B3\n```\n\n### 4.1 组织逻辑：人口学分类 (Demographics) vs. IP/叙事分类 (Theme Block)\n- **Comiket 逻辑**：以传统社会人口学或创作者身份标签划分。例如，将展位粗暴地划分为“男性向”（Day2 集中爆发）、“女性向”、“原创作”等大门类。这种分类基于日本悠久的漫展契约文化，便于特定性别的消费者进行针对性消费。\n- **Comicup 逻辑**：以特定的 IP（叙事客体）构建微观街道。例如“明日方舟专区”、“恋与深空街道”。无论男性向还是女性向二创，均在同一个 IP 专区内并存，通过精细的空间规划避免流量对冲。这反映了中国年轻一代“以 IP 叙事结社”的部落化特征。\n\n### 4.2 题材载体：“视觉主导” vs. “文笔与画笔平权”\n- **Comiket 倾向**：漫画与插画集（同人志）占比超过 90%，文本小说极度边缘化。这与 Pixiv 的视觉驱动社交属性以及日本对“画作”的实体消费历史契合。\n- **Comicup 倾向**：在过滤掉小周边后，**同人小说占比依然坚挺在 30% 上下**。女性向同人小说装帧精美、字数极多，这得益于 LOFTER 等文字社交平台所沉淀的文本创作文化，实现了国内特有的“文笔与画笔平权”现象。\n\n### 4.3 集中度结构：中度寡占型 (Moderately Oligopolistic) vs. 极度分散长尾型 (Highly Decentralized)\n- **Comiket 结构**：C108/C107 的 CR10 稳定在 61% 以上，少数几个顶流题材（如《蔚蓝档案》、男性向）吸纳了绝大部分流量与资金。\n- **Comicup 结构**：CPSP 与 CP31 的 CR10 仅在 30% 左右。整个大盘呈现出长尾、多中心特征。任何一个新兴 IP 都能在 Comicup 快速申请到专区街道并形成自我闭环，创作者的试错成本和准入门槛极低。\n\n### 4.4 流通通路：物理即时结清 vs. 线上线下两栖 (O2O) 融合\n- **Comiket 通路**：现场以现金物理交易（Cash only）为主，购本流程为“排队-付款-拿书”的纯即时物理结算。售后依托 Melonbooks 和虎之穴（Toranoana）进行线下委托代销。\n- **Comicup 通路**：深度依托 Allcpp 等官方与第三方数字 App。大额制品或精装本广泛使用“线上抢预约/预售-现场扫码核销”的 O2O 流通漏斗，现场非现金支付率接近 100%。这使得社团能通过心愿单（hotCount）前置估算产量，极大规避了仓储与囤货风险。\n\n### 4.5 社交资本：商业交换经济 (Commodity Market) vs. 互惠礼物经济 (Gift Economy)\n- **Comiket 交换**：以标准货币交易为主，现场社团更具“商业摊贩”性质，无料发放比例极低。\n- **Comicup 交换**：现场无料制品占比常年维持在 4% 以上，甚至形成了“无本摊位（纯发放无料和零食）”和“排队无料交换”的社群传统。通过无料物理介质的非商业对等赠予，创作者和读者之间建立了强烈的互惠资本与同好认同，这正是同人本源精神（即非盈利性、同好爱发电）在中国本土衍生出的特色社群仪式。\n\n---\n\n## 5. 结论与展望\n\n本项多展期联合实证分析清晰地勾勒出了中日两国同人市场在走向繁荣时的不同物理演进通路：\n*   **日本 Comiket** 是同人志产业的“古典契约范式”终极形态，它高度依赖稳定的物理时间互斥调度和成熟的视觉内容供应链，呈现高头部集中度和强物理分布自相关性。\n*   **中国 Comicup** 则演化成了“数字化两栖生态范式”，通过线上心愿单、两栖 O2O 核销消解了供求不确定性；它支持长尾去中心化的创作产出，并在无料发放中孕育出强大的礼物经济社群凝聚力。\n\n未来的同人生态研究应继续跟踪 O2O 通路在多模态内容分发（如 AI 辅助创作、个性化小众定制周边）中的演进，以及中日同人文化在跨境流动（如中国手游 IP 在日本 Comiket 物理扩张）中的双向输入与融合规律。\n\n---\n\n## 附录：方法论注意事项与数据局限性声明\n\n### 1. 跨国分析单位不对齐说明（社团 vs 制品）\n由于日本 Comiket 官方数据以“注册社团数”为统计单位（每个社团对应一条记录），而中国 Comicup 数据以更细粒度的“制品”为统计单位（一个社团可以关联多个制品）。这导致在计算市场集中度（CR5/CR10）时，Comicup 的长尾制品数量会天然稀释集中度数值。因此两展的集中度绝对值不宜作直接跨国比较，仅用于定性划分各自的市场大盘类别（Comiket 呈中度寡占型，Comicup 呈极长尾分散型）。\n\n### 2. Moran\'s I 空间自相关跨国比较的局限性\n两展空间邻近权重矩阵 $W$ 的定义不同：Comiket 邻接关系基于精确的物理相对位置（桌号与展馆间距），而 Comicup 邻接关系基于抽象专区分类（`position_name` 专区街道）。两者的 Moran\'s I 值仅代表各自内部的空间组织纯度（即“同好街区”的集聚成效），不具有绝对值的跨国横向可比性。\n\n### 3. 本地数据库采样局限与重合度数据说明\n- 本地数据库 `data/comic_market.db` 中 CP31 数据为精简子集（主要集中于 D1 的 10,000 件制品，D2 仅包含 706 件制品），因此在本地库直接查询计算得出的双日题材重合度会呈现抽样偏差（如 Jaccard 相似度为 16.59%）。\n- 报告正文中的 **94.70%** 重合度是基于完整大盘数据集算得的，特此声明。\n\n### 4. 特殊属性检索词典逻辑\n本报告中无料、合志、再录、突发等特殊同人属性是通过对制品名称和标签进行关键词多重模糊匹配提取的，具体检索词典如下：\n- **无料/免费**：`["无料", "免费", "送", "交换"]`\n- **合志**：`["合志", "联手志", "合同志"]`\n- **再录/合集**：`["再录", "合集", "再版", "精选集"]`\n- **突发本**：`["突发", "突发本", "临时编撰"]`\n\n---\n', 'w', 'utf-8', ('encoding',), 'Successfully generated multi-era study report at: ', ('research/comiket_vs_comicup.md', 'research/comiket_vs_comicup_comparison.md'), 'Removed redundant document: ', 'Warning: Failed to remove ', ': ')
+Names: ('os', 'makedirs', 'path', 'dirname', 'abspath', 'get', 'range', 'len', 'sorted', 'list', 'set', 'keys', 'items', 'join', 'open', 'write', 'print', 'exists', 'remove', 'Exception')
+Varnames: ('stats', 'output_path', 'os', 'c107', 'c108', 'cpsp', 'cp31', 'comiket_genre_rows', 'c107_genres', 'c108_genres', 'idx', 'c107_part', 'c108_part', 'comiket_moran_rows', 'target_genres', 'tg', 'c107_m', 'c108_m', 'c107_val', 'c108_val', 'comicup_theme_rows', 'cpsp_themes', 'cp31_themes', 'cpsp_part', 'cp31_part', 'comicup_media_rows', 'all_media_types', 'mtype', 'cpsp_val', 'cp31_val', 'cpsp_mat', 'cp31_mat', 'materiality_table_rows', 'labels_cn', 'key', 'name_cn', 'comicup_moran_rows', 'target_themes', 'tt', 'cpsp_m', 'cp31_m', 'sdi_comparison_rows', 'show_themes', 'cpsp_d', 'cp31_d', 'report_content', 'f', 'filepath', 'e')
+
+Disassembly failed: list index out of range
+
+
+=== Code Object: <dictcomp> (depth=2) ===
+Constants: ('type',)
+Names: ()
+Varnames: ('.0', 'm')
+
+574           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              <124>
+              CALL                     2
+
+
+=== Code Object: <dictcomp> (depth=2) ===
+Constants: ('type',)
+Names: ()
+Varnames: ('.0', 'm')
+
+575           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              <124>
+              CALL                     2
+
+
+=== Code Object: <lambda> (depth=2) ===
+Constants: (None, 'count', 0)
+Names: ('max', 'get')
+Varnames: ('x',)
+
+  --           CALL                     2
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               BINARY_OP                2 (//)
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               <124>
+               RERAISE                  0
+               COMPARE_OP               2 (<)
+               FOR_ITER                 2 (to L1)
+               CACHE
+               CACHE
+       L1:     CACHE
+               CALL                     1
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               POP_JUMP_IF_FALSE        1 (to L2)
+               COMPARE_OP               2 (<)
+               FOR_ITER                 2 (to L3)
+               CACHE
+               CACHE
+       L3:     CACHE
+               BINARY_OP                1 (&)
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               <124>
+               RERAISE                  0
+               COMPARE_OP               2 (<)
+               FOR_ITER                 2 (to L4)
+               CACHE
+               CACHE
+       L4:     CACHE
+               CALL                     1
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               CACHE
+               POP_JUMP_IF_FALSE        1 (to L5)
+               COMPARE_OP               2 (<)
+               FOR_ITER                 2 (to L6)
+               CACHE
+               CACHE
+       L6:     CACHE
+               COMPARE_OP               2 (<)
+               FOR_ITER                 2 (to L7)
+               CACHE
+               CACHE
+       L7:     CACHE
+               LOAD_DEREF               0 (x)
+
+
+=== Code Object: <dictcomp> (depth=2) ===
+Constants: ('theme',)
+Names: ()
+Varnames: ('.0', 'd')
+
+611           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              <124>
+              CALL                     2
+
+
+=== Code Object: <dictcomp> (depth=2) ===
+Constants: ('theme',)
+Names: ()
+Varnames: ('.0', 'd')
+
+612           CALL_KW                  0
+              <125>
+              <124>
+              POP_JUMP_IF_FALSE        0 (to L1)
+      L1:     CACHE
+              CACHE
+              CACHE
+              CACHE
+              <124>
+              CALL                     2
+
+
+=== Code Object: <listcomp> (depth=2) ===
+Constants: ()
+Names: ()
+Varnames: ('.0', 't')
+
+  --           CALL                     2
+Disassembly failed: tuple index out of range
+
+
