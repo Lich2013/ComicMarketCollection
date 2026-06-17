@@ -349,90 +349,104 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                             if len(parsed_tweets) >= 500:
                                 break
                             entry_id = entry.get("entryId", "")
-                            if not (entry_id.startswith("tweet-") or entry_id.startswith("pinnedEntry-")):
-                                continue
                             content = entry.get("content", {})
-                            if content.get("entryType") != "TimelineTimelineItem":
-                                continue
-                            item_content = content.get("itemContent", {})
-                            if item_content.get("itemType") != "TimelineTweet":
-                                continue
-                            tweet_results = item_content.get("tweet_results", {})
-                            res = tweet_results.get("result")
-                            if not res:
-                                continue
-                                
-                            typename = res.get("__typename")
-                            tweet_obj = None
-                            if typename == "Tweet":
-                                tweet_obj = res
-                            elif typename == "TweetWithVisibilityResults":
-                                tweet_obj = res.get("tweet")
-                                
-                            if not tweet_obj:
-                                continue
-                                
-                            legacy = tweet_obj.get("legacy", {})
-                            tweet_id = tweet_obj.get("rest_id")
                             
-                            # 用外部推文的发布时间做阈值判定
-                            created_at = legacy.get("created_at", "")
+                            # Collect raw (entry_id, tweet_results) tuples from this entry.
+                            # Handles both standalone TimelineTimelineItem and
+                            # TimelineTimelineModule (conversation threads, e.g. self-replies).
+                            raw_tweets = []
+                            if entry_id.startswith("tweet-") or entry_id.startswith("pinnedEntry-"):
+                                if content.get("entryType") == "TimelineTimelineItem":
+                                    item_content = content.get("itemContent", {})
+                                    if item_content.get("itemType") == "TimelineTweet":
+                                        raw_tweets.append((entry_id, item_content.get("tweet_results", {})))
+                            elif content.get("entryType") == "TimelineTimelineModule":
+                                # Conversation thread — extract inner tweet items
+                                for item in content.get("items", []):
+                                    inner_id = item.get("entryId", "")
+                                    inner_item = item.get("item", {})
+                                    inner_content = inner_item.get("itemContent", {})
+                                    if inner_content.get("itemType") == "TimelineTweet":
+                                        raw_tweets.append((inner_id, inner_content.get("tweet_results", {})))
                             
-                            # 时间过滤
-                            if created_at:
-                                try:
-                                    tweet_date = datetime.strptime(created_at, "%a %b %d %H:%M:%S %z %Y")
-                                except Exception:
-                                    tweet_date = None
-                                    
-                                if tweet_date:
-                                    if tweet_date > until_threshold:
-                                        continue
-                                    # Pinned tweet (either entry starts with pinnedEntry or it came from TimelinePinEntry)
-                                    is_pinned = entry_id.startswith("pinnedEntry-") or inst_type == "TimelinePinEntry"
-                                    if not is_pinned and tweet_date < date_threshold:
-                                        continue
-                                    if is_pinned and tweet_date < date_threshold:
-                                        # 即使是置顶推文，也可以在这里进行过滤或者保留
-                                        continue
-                                        
-                            # 原创/自转校验 (检查外部推文的正文)
-                            outer_text = legacy.get("full_text", "")
-                            rt_match = re.match(r"^RT @(\w+):", outer_text)
-                            if rt_match:
-                                if rt_match.group(1).lower() != username.lower():
+                            for tweet_entry_id, tweet_results in raw_tweets:
+                                if len(parsed_tweets) >= 500:
+                                    break
+                                res = tweet_results.get("result")
+                                if not res:
                                     continue
                                     
-                            # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本，并归一化为原推 ID
-                            retweet_legacy = legacy
-                            original_tweet_id = tweet_id
-                            retweet_res = legacy.get("retweeted_status_result", {}).get("result")
-                            if retweet_res:
-                                rt_typename = retweet_res.get("__typename")
-                                rt_obj = None
-                                if rt_typename == "Tweet":
-                                    rt_obj = retweet_res
-                                elif rt_typename == "TweetWithVisibilityResults":
-                                    rt_obj = retweet_res.get("tweet")
-                                if rt_obj:
-                                    retweet_legacy = rt_obj.get("legacy", legacy)
-                                    original_tweet_id = rt_obj.get("rest_id", tweet_id)
+                                typename = res.get("__typename")
+                                tweet_obj = None
+                                if typename == "Tweet":
+                                    tweet_obj = res
+                                elif typename == "TweetWithVisibilityResults":
+                                    tweet_obj = res.get("tweet")
                                     
-                            resolved_text = retweet_legacy.get("full_text", "")
-                            
-                            # 提取图片资源 (从解析后的 legacy 中)
-                            img_urls = []
-                            ext_entities = retweet_legacy.get("extended_entities", {})
-                            for media in ext_entities.get("media", []):
-                                if media.get("type") == "photo":
-                                    img_urls.append(media.get("media_url_https"))
-                            if not img_urls:
-                                continue
+                                if not tweet_obj:
+                                    continue
+                                    
+                                legacy = tweet_obj.get("legacy", {})
+                                tweet_id = tweet_obj.get("rest_id")
                                 
-                            # 上下文关键字匹配
-                            if is_potential_catalog(resolved_text, circle):
-                                parsed_tweets[original_tweet_id] = {
-                                    "tweet_id": original_tweet_id,
+                                # 用外部推文的发布时间做阈值判定
+                                created_at = legacy.get("created_at", "")
+                                
+                                # 时间过滤
+                                if created_at:
+                                    try:
+                                        tweet_date = datetime.strptime(created_at, "%a %b %d %H:%M:%S %z %Y")
+                                    except Exception:
+                                        tweet_date = None
+                                        
+                                    if tweet_date:
+                                        if tweet_date > until_threshold:
+                                            continue
+                                        # Pinned tweet (either entry starts with pinnedEntry or it came from TimelinePinEntry)
+                                        is_pinned = tweet_entry_id.startswith("pinnedEntry-") or inst_type == "TimelinePinEntry"
+                                        if not is_pinned and tweet_date < date_threshold:
+                                            continue
+                                        if is_pinned and tweet_date < date_threshold:
+                                            # 即使是置顶推文，也可以在这里进行过滤或者保留
+                                            continue
+                                            
+                                # 原创/自转校验 (检查外部推文的正文)
+                                outer_text = legacy.get("full_text", "")
+                                rt_match = re.match(r"^RT @(\w+):", outer_text)
+                                if rt_match:
+                                    if rt_match.group(1).lower() != username.lower():
+                                        continue
+                                        
+                                # 若为转发/自转，提取原始推文的 legacy 对象以读取图片和完整文本，并归一化为原推 ID
+                                retweet_legacy = legacy
+                                original_tweet_id = tweet_id
+                                retweet_res = legacy.get("retweeted_status_result", {}).get("result")
+                                if retweet_res:
+                                    rt_typename = retweet_res.get("__typename")
+                                    rt_obj = None
+                                    if rt_typename == "Tweet":
+                                        rt_obj = retweet_res
+                                    elif rt_typename == "TweetWithVisibilityResults":
+                                        rt_obj = retweet_res.get("tweet")
+                                    if rt_obj:
+                                        retweet_legacy = rt_obj.get("legacy", legacy)
+                                        original_tweet_id = rt_obj.get("rest_id", tweet_id)
+                                        
+                                resolved_text = retweet_legacy.get("full_text", "")
+                                
+                                # 提取图片资源 (从解析后的 legacy 中)
+                                img_urls = []
+                                ext_entities = retweet_legacy.get("extended_entities", {})
+                                for media in ext_entities.get("media", []):
+                                    if media.get("type") == "photo":
+                                        img_urls.append(media.get("media_url_https"))
+                                if not img_urls:
+                                    continue
+                                    
+                                # 上下文关键字匹配
+                                if is_potential_catalog(resolved_text, circle):
+                                    parsed_tweets[original_tweet_id] = {
+                                        "tweet_id": original_tweet_id,
                                     "tweet_url": f"https://x.com/{username}/status/{original_tweet_id}",
                                     "tweet_text": resolved_text,
                                     "image_urls": img_urls
