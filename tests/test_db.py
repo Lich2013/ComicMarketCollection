@@ -3,7 +3,7 @@ import pytest
 from src.db import (
     init_db, save_circle, get_all_circles, save_catalog, 
     get_pending_catalogs, update_catalog_status, save_goods, 
-    get_db_connection, get_filtered_circle_ids
+    get_db_connection, get_filtered_circle_ids, get_circle
 )
 from src.circle_sync import extract_twitter_username
 from src.twitter_sync import is_potential_catalog, parse_cookie_string
@@ -24,6 +24,32 @@ def setup_and_teardown():
     # 清理
     if os.path.exists(TEST_DB_PATH):
         os.remove(TEST_DB_PATH)
+
+def test_get_circle():
+    # Test non-existing circle
+    assert get_circle(99999, db_path=TEST_DB_PATH) is None
+
+    circle_data = {
+        "id": 12345,
+        "name": "Test Circle",
+        "author": "Test Author",
+        "genre": "Original",
+        "description": "Test Description",
+        "hall": "e123",
+        "day": "Day1",
+        "block": "A",
+        "space": "01a",
+        "twitter_url": "https://twitter.com/test",
+        "twitter_username": "test",
+        "pixiv_url": "https://pixiv.net/test",
+        "circle_cut_url": "https://circle.ms/cut.png"
+    }
+    
+    save_circle(circle_data, db_path=TEST_DB_PATH)
+    res = get_circle(12345, db_path=TEST_DB_PATH)
+    assert res is not None
+    assert res["name"] == "Test Circle"
+    assert res["author"] == "Test Author"
 
 def test_save_and_get_circle():
     circle_data = {
@@ -368,10 +394,10 @@ def test_save_catalog_on_conflict_update():
     # 第一次保存，status = 'pending'
     catalog_data_1 = {
         "circle_id": 777,
-        "tweet_id": "1800000000000000000_0",
+        "tweet_id": "1800000000000000000",
         "tweet_url": "https://twitter.com/dedup/status/1800000000000000000",
         "tweet_text": "Original text C107 お品書き",
-        "image_path": "data/images/777/image_0.jpg",
+        "image_path": "data/images/777/image_0.jpg,data/images/777/image_1.jpg",
         "status": "pending"
     }
     save_catalog(catalog_data_1, db_path=TEST_DB_PATH)
@@ -379,16 +405,17 @@ def test_save_catalog_on_conflict_update():
     # 验证已保存
     pending = get_pending_catalogs(db_path=TEST_DB_PATH)
     assert len(pending) == 1
-    assert pending[0]["tweet_id"] == "1800000000000000000_0"
+    assert pending[0]["tweet_id"] == "1800000000000000000"
     assert pending[0]["tweet_text"] == "Original text C107 お品書き"
+    assert pending[0]["image_path"] == "data/images/777/image_0.jpg,data/images/777/image_1.jpg"
     
     # 模拟第二次保存（自转归一化后重新导入），文字略有更新，状态依然为 pending 覆盖
     catalog_data_2 = {
         "circle_id": 777,
-        "tweet_id": "1800000000000000000_0",
+        "tweet_id": "1800000000000000000",
         "tweet_url": "https://twitter.com/dedup/status/1800000000000000000",
         "tweet_text": "Original text C107 お品書き (Updated)",
-        "image_path": "data/images/777/image_0_new.jpg",
+        "image_path": "data/images/777/image_0_new.jpg,data/images/777/image_1_new.jpg",
         "status": "pending"
     }
     save_catalog(catalog_data_2, db_path=TEST_DB_PATH)
@@ -396,9 +423,9 @@ def test_save_catalog_on_conflict_update():
     # 验证只有一条记录，且字段被成功更新
     pending = get_pending_catalogs(db_path=TEST_DB_PATH)
     assert len(pending) == 1
-    assert pending[0]["tweet_id"] == "1800000000000000000_0"
+    assert pending[0]["tweet_id"] == "1800000000000000000"
     assert pending[0]["tweet_text"] == "Original text C107 お品書き (Updated)"
-    assert pending[0]["image_path"] == "data/images/777/image_0_new.jpg"
+    assert pending[0]["image_path"] == "data/images/777/image_0_new.jpg,data/images/777/image_1_new.jpg"
 
 def test_scrape_twitter_profile_retweet_deduplication():
     from unittest.mock import patch, MagicMock
@@ -774,11 +801,11 @@ def test_export_goods_to_csv():
     
     cat1 = {
         "circle_id": 101, "tweet_id": "t1", "tweet_url": "https://x.com/a/status/t1", "tweet_text": "C108新刊",
-        "image_path": "path1", "status": "pending"
+        "image_path": "path1", "status": "processed"
     }
     cat2 = {
         "circle_id": 102, "tweet_id": "t2", "tweet_url": "https://x.com/b/status/t2", "tweet_text": "C108周边",
-        "image_path": "path2", "status": "pending"
+        "image_path": "path2", "status": "processed"
     }
     cat1_id = save_catalog(cat1, db_path=TEST_DB_PATH)
     cat2_id = save_catalog(cat2, db_path=TEST_DB_PATH)
@@ -816,7 +843,7 @@ def test_export_goods_to_csv():
         with open(temp_csv_path, "r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
             headers = next(reader)
-            assert headers == ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
+            assert headers == ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "细分IP", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
             
             rows = list(reader)
             assert len(rows) == 2
@@ -829,12 +856,13 @@ def test_export_goods_to_csv():
             assert rows[0][4] == "Circle A"
             assert rows[0][5] == "Author A"
             assert rows[0][6] == "Original"      # 类别 (genre)
-            assert rows[0][7] == "新刊"
-            assert rows[0][8] == "Goods A1"
-            assert rows[0][9] == "1"
-            assert rows[0][10] == "1000"
-            assert rows[0][11] == "https://x.com/a/status/t1"
-            assert rows[0][12] == "https://twitter.com/circlea"
+            assert rows[0][7] == ""              # 细分IP (空)
+            assert rows[0][8] == "新刊"          # 类型
+            assert rows[0][9] == "Goods A1"      # 商品
+            assert rows[0][10] == "1"            # 数量
+            assert rows[0][11] == "1000"         # 价格
+            assert rows[0][12] == "https://x.com/a/status/t1"
+            assert rows[0][13] == "https://twitter.com/circlea"
             
         # 3. 按条件筛选导出验证 (只导出 Day2)
         export_goods_to_csv(temp_csv_path, day_list=["Day2"], db_path=TEST_DB_PATH)
@@ -853,6 +881,85 @@ def test_export_goods_to_csv():
             next(reader)
             rows = list(reader)
             assert len(rows) == 0
+            
+    finally:
+        import os
+        if os.path.exists(temp_csv_path):
+            os.remove(temp_csv_path)
+
+
+def test_export_goods_to_csv_with_multiple_catalogs():
+    import tempfile
+    import csv
+    from src.db import export_goods_to_csv
+    
+    # 1. 写入测试社团
+    c1 = {
+        "id": 201, "name": "Circle Merge", "author": "Author M", "genre": "Original",
+        "description": "", "hall": "East 1", "day": "Day1", "block": "A", "space": "01a",
+        "twitter_url": "https://twitter.com/circlemerge", "twitter_username": "merge", "pixiv_url": "", "circle_cut_url": ""
+    }
+    save_circle(c1, db_path=TEST_DB_PATH)
+    
+    # 2. 写入两个不同的品书推文
+    # 推文 1 (较旧): tweet_id = "1000000000000000001"
+    cat1 = {
+        "circle_id": 201, "tweet_id": "1000000000000000001", "tweet_url": "https://x.com/merge/status/1000000000000000001", "tweet_text": "品书第一弹",
+        "image_path": "path1", "status": "processed"
+    }
+    # 推文 2 (较新): tweet_id = "1000000000000000002"
+    cat2 = {
+        "circle_id": 201, "tweet_id": "1000000000000000002", "tweet_url": "https://x.com/merge/status/1000000000000000002", "tweet_text": "品书第二弹",
+        "image_path": "path2", "status": "processed"
+    }
+    cat1_id = save_catalog(cat1, db_path=TEST_DB_PATH)
+    cat2_id = save_catalog(cat2, db_path=TEST_DB_PATH)
+    
+    # 3. 写入商品
+    # 推文 1 关联的商品：商品 A (1000円)，商品 B (500円)
+    # 推文 2 关联的商品：商品 A (1200円，涨价)，商品 C (800円，追加周边)
+    goods = [
+        {
+            "circle_id": 201, "catalog_id": cat1_id, "name": "商品 A", "type": "新刊", "price": 1000, "is_set": 0, "raw_json": "{}"
+        },
+        {
+            "circle_id": 201, "catalog_id": cat1_id, "name": "商品 B", "type": "既刊", "price": 500, "is_set": 0, "raw_json": "{}"
+        },
+        {
+            "circle_id": 201, "catalog_id": cat2_id, "name": "商品 A", "type": "新刊", "price": 1200, "is_set": 0, "raw_json": "{}"
+        },
+        {
+            "circle_id": 201, "catalog_id": cat2_id, "name": "商品 C", "type": "周边", "price": 800, "is_set": 0, "raw_json": "{}"
+        }
+    ]
+    save_goods(goods, db_path=TEST_DB_PATH)
+    
+    with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".csv") as temp_csv:
+        temp_csv_path = temp_csv.name
+        
+    try:
+        # 4. 执行导出并验证结果
+        export_goods_to_csv(temp_csv_path, db_path=TEST_DB_PATH)
+        
+        with open(temp_csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            rows = list(reader)
+            
+            # 应仅包含商品 A (最新版 1200円)、商品 B (500円)、商品 C (800円)
+            assert len(rows) == 3
+            
+            # 把每一行映射为 name -> price 的字典，以便断言
+            goods_dict = {row[9]: int(row[11]) for row in rows}
+            
+            assert "商品 A" in goods_dict
+            assert goods_dict["商品 A"] == 1200  # 取最新的推文 2 价格
+            
+            assert "商品 B" in goods_dict
+            assert goods_dict["商品 B"] == 500   # 保留推文 1 中的商品 B
+            
+            assert "商品 C" in goods_dict
+            assert goods_dict["商品 C"] == 800   # 保留推文 2 中的商品 C
             
     finally:
         import os

@@ -10,6 +10,7 @@ TBD - created by archiving change export-goods-to-csv. Update Purpose after arch
 3. 动态过滤筛选：系统 MUST 支持在导出时，根据用户指定的社团筛选参数（如指定天数、场馆、社团 ID 列表、名称或模糊匹配）仅导出符合条件的社团的商品数据。
 4. 数量兜底：由于数据库不存储商品购买数量，导出的每行记录中，`数量` 列必须默认为 `1`。
 5. 编码规范：CSV 文件的写入编码必须使用带有 BOM 的 UTF-8（`utf-8-sig`），确保在不同操作系统（如 Windows）下直接用 Excel 双击打开时不发生乱码。
+6. 商品动态去重合并：当同一个社团关联了多个已解析成功的品书推文时，系统 MUST 在查询层面对属于同社团的同名商品进行分组去重，仅保留关联最新的 `tweet_id`（基于 Snowflake 顺序值最大）的那一个商品项信息，并与其余不同名称的追加商品一同进行合并导出。
 
 #### Scenario: 成功全量导出商品数据到 CSV
 - **WHEN** 用户通过命令行参数 `--export-goods` 指定导出路径且不加任何筛选过滤参数
@@ -22,4 +23,8 @@ TBD - created by archiving change export-goods-to-csv. Update Purpose after arch
 #### Scenario: 过滤后无符合条件的商品数据时导出空表
 - **WHEN** 用户设置的过滤条件过于严苛导致无任何社团或商品符合条件
 - **THEN** 系统生成一个仅包含表头的 CSV 文件，且控制台输出提示信息
+
+#### Scenario: 成功合并多品书商品并去重导出
+- **WHEN** 同一社团关联了两个品书（包含同名不同价格的商品 A，以及推文 1 独有的商品 B 和推文 2 独有的商品 C，推文 2 的 `tweet_id` 更大）
+- **THEN** 导出的 CSV 文件中该社团的商品记录仅包含最新版的商品 A（价格为推文 2 对应的价格）、商品 B 与商品 C，无多余的重复行
 

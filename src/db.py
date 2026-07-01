@@ -148,6 +148,56 @@ def init_db(db_path: str = DEFAULT_DB_PATH):
             )
         """)
         
+        # 9. 创建 comiket_genre_mapping 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS comiket_genre_mapping (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event TEXT NOT NULL,
+                day TEXT NOT NULL,
+                genre_code INTEGER NOT NULL,
+                genre_name TEXT NOT NULL,
+                note TEXT,
+                supplement TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event, day, genre_code, supplement) ON CONFLICT REPLACE
+            )
+        """)
+
+        # 10. 创建 circle_ip_tags 关系表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS circle_ip_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event TEXT NOT NULL,
+                circle_id INTEGER NOT NULL,
+                ip_tag TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                source TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event, circle_id, ip_tag) ON CONFLICT REPLACE
+            )
+        """)
+
+        # 11. 创建 v_circles_with_ip_tags 查询视图
+        cursor.execute("""
+            CREATE VIEW IF NOT EXISTS v_circles_with_ip_tags AS
+            SELECT 
+                c.id AS circle_id,
+                c.name AS circle_name,
+                c.author,
+                c.day,
+                c.hall,
+                c.block,
+                c.space,
+                c.genre AS official_genre,
+                t.ip_tag,
+                t.confidence,
+                t.source AS tag_source
+            FROM circles c
+            LEFT JOIN circle_ip_tags t 
+              ON c.id = t.circle_id 
+              AND t.event = 'C108'
+        """)
+        
         conn.commit()
 
 
@@ -178,23 +228,43 @@ def save_circle(circle_data: dict, db_path: str = DEFAULT_DB_PATH):
             circle_cut_url = excluded.circle_cut_url,
             updated_at = CURRENT_TIMESTAMP
     """
-    with get_db_connection(db_path) as conn:
-        conn.execute(query, circle_data)
-        conn.commit()
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.execute(query, circle_data)
+    finally:
+        conn.close()
+
+def get_circle(circle_id: int, db_path: str = DEFAULT_DB_PATH) -> dict | None:
+    """根据 ID 获取单个社团信息"""
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM circles WHERE id = ?", (circle_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
 
 def get_all_circles(db_path: str = DEFAULT_DB_PATH) -> list:
     """获取所有社团信息"""
-    with get_db_connection(db_path) as conn:
+    conn = get_db_connection(db_path)
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM circles")
         return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 def get_existing_circle_ids(db_path: str = DEFAULT_DB_PATH) -> set[int]:
     """获取数据库中已同步的所有社团 ID 集合"""
-    with get_db_connection(db_path) as conn:
+    conn = get_db_connection(db_path)
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM circles")
         return {row[0] for row in cursor.fetchall()}
+    finally:
+        conn.close()
 
 
 def save_catalog(catalog_data: dict, db_path: str = DEFAULT_DB_PATH) -> int:
@@ -211,7 +281,8 @@ def save_catalog(catalog_data: dict, db_path: str = DEFAULT_DB_PATH) -> int:
             updated_at = CURRENT_TIMESTAMP
         RETURNING id
     """
-    with get_db_connection(db_path) as conn:
+    conn = get_db_connection(db_path)
+    try:
         cursor = conn.cursor()
         try:
             cursor.execute(query, catalog_data)
@@ -246,10 +317,13 @@ def save_catalog(catalog_data: dict, db_path: str = DEFAULT_DB_PATH) -> int:
         cursor.execute("SELECT id FROM catalogs WHERE tweet_id = ?", (catalog_data['tweet_id'],))
         row = cursor.fetchone()
         return row[0] if row else None
+    finally:
+        conn.close()
 
 def get_pending_catalogs(db_path: str = DEFAULT_DB_PATH, circle_ids: set[int] = None) -> list:
     """获取待处理 (pending) 状态的品书，支持按社团 ID 集合筛选"""
-    with get_db_connection(db_path) as conn:
+    conn = get_db_connection(db_path)
+    try:
         cursor = conn.cursor()
         if circle_ids is not None:
             if not circle_ids:
@@ -271,6 +345,8 @@ def get_pending_catalogs(db_path: str = DEFAULT_DB_PATH, circle_ids: set[int] = 
             """
             cursor.execute(query)
         return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 def get_filtered_circle_ids(
     day_list: list[str] = None, 
@@ -302,21 +378,27 @@ def get_filtered_circle_ids(
         query += " AND (name LIKE ? OR author LIKE ?)"
         params.extend([f"%{name_query}%", f"%{name_query}%"])
         
-    with get_db_connection(db_path) as conn:
+    conn = get_db_connection(db_path)
+    try:
         cursor = conn.cursor()
         cursor.execute(query, params)
         return {row[0] for row in cursor.fetchall()}
+    finally:
+        conn.close()
 
 
 def update_catalog_status(catalog_id: int, status: str, db_path: str = DEFAULT_DB_PATH):
     """更新品书的状态"""
-    with get_db_connection(db_path) as conn:
-        conn.execute("""
-            UPDATE catalogs 
-            SET status = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE id = ?
-        """, (status, catalog_id))
-        conn.commit()
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.execute("""
+                UPDATE catalogs 
+                SET status = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            """, (status, catalog_id))
+    finally:
+        conn.close()
 
 def save_goods(goods_list: list[dict], db_path: str = DEFAULT_DB_PATH):
     """批量保存商品制品记录"""
@@ -324,9 +406,12 @@ def save_goods(goods_list: list[dict], db_path: str = DEFAULT_DB_PATH):
         INSERT INTO goods (circle_id, catalog_id, name, type, price, is_set, raw_json)
         VALUES (:circle_id, :catalog_id, :name, :type, :price, :is_set, :raw_json)
     """
-    with get_db_connection(db_path) as conn:
-        conn.executemany(query, goods_list)
-        conn.commit()
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.executemany(query, goods_list)
+    finally:
+        conn.close()
 
 
 def export_goods_to_csv(
@@ -358,7 +443,7 @@ def export_goods_to_csv(
     if os.path.dirname(output_path):
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-    headers = ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
+    headers = ["日期", "场馆", "区域", "摊位号", "社团名", "作者", "类别", "细分IP", "类型", "商品", "数量", "价格", "来源推文", "社交媒体"]
 
     rows = []
     if target_circle_ids is not None and not target_circle_ids:
@@ -366,6 +451,22 @@ def export_goods_to_csv(
         pass
     else:
         query = """
+            WITH deduplicated_goods AS (
+                SELECT 
+                    g.circle_id,
+                    g.catalog_id,
+                    g.name AS goods_name,
+                    g.type AS goods_type,
+                    g.price AS price,
+                    cat.tweet_url AS tweet_url,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY g.circle_id, g.name 
+                        ORDER BY CAST(cat.tweet_id AS INTEGER) DESC
+                    ) AS rn
+                FROM goods g
+                JOIN catalogs cat ON g.catalog_id = cat.id
+                WHERE cat.status = 'processed'
+            )
             SELECT 
                 c.day AS "day",
                 c.hall AS "hall",
@@ -374,28 +475,33 @@ def export_goods_to_csv(
                 c.name AS "circle_name",
                 c.author AS "circle_author",
                 c.genre AS "circle_genre",
-                g.type AS "goods_type",
-                g.name AS "goods_name",
+                t.ip_tag AS "ip_tag",
+                dg.goods_type AS "goods_type",
+                dg.goods_name AS "goods_name",
                 1 AS "quantity",
-                g.price AS "price",
-                cat.tweet_url AS "tweet_url",
+                dg.price AS "price",
+                dg.tweet_url AS "tweet_url",
                 c.twitter_url AS "twitter_url"
-            FROM goods g
-            JOIN circles c ON g.circle_id = c.id
-            LEFT JOIN catalogs cat ON g.catalog_id = cat.id
+            FROM deduplicated_goods dg
+            JOIN circles c ON dg.circle_id = c.id
+            LEFT JOIN circle_ip_tags t ON c.id = t.circle_id AND t.event = 'C108'
+            WHERE dg.rn = 1
         """
         params = []
         if target_circle_ids is not None:
             placeholders = ",".join("?" for _ in target_circle_ids)
-            query += f" WHERE g.circle_id IN ({placeholders})"
+            query += f" AND dg.circle_id IN ({placeholders})"
             params.extend(list(target_circle_ids))
 
         query += " ORDER BY c.day, c.hall, c.block, c.space"
 
-        with get_db_connection(db_path) as conn:
+        conn = get_db_connection(db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute(query, params)
             rows = cursor.fetchall()
+        finally:
+            conn.close()
 
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
@@ -415,6 +521,7 @@ def export_goods_to_csv(
                 row["circle_name"],
                 row["circle_author"],
                 row["circle_genre"],
+                row["ip_tag"] or "",
                 row["goods_type"],
                 row["goods_name"],
                 row["quantity"],
@@ -424,3 +531,39 @@ def export_goods_to_csv(
             ])
             
     print(f"Successfully exported {len(rows)} goods items to {output_path}")
+
+
+def save_comiket_genre_mappings(mappings: list[dict], db_path: str = DEFAULT_DB_PATH):
+    """批量保存 Comiket 类型对照表"""
+    query = """
+        INSERT OR REPLACE INTO comiket_genre_mapping (
+            event, day, genre_code, genre_name, note, supplement
+        ) VALUES (
+            :event, :day, :genre_code, :genre_name, :note, :supplement
+        )
+    """
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.executemany(query, mappings)
+    finally:
+        conn.close()
+
+
+def save_circle_ip_tags(tags: list[dict], db_path: str = DEFAULT_DB_PATH):
+    """批量保存社团 IP 标签"""
+    query = """
+        INSERT OR REPLACE INTO circle_ip_tags (
+            event, circle_id, ip_tag, confidence, source
+        ) VALUES (
+            :event, :circle_id, :ip_tag, :confidence, :source
+        )
+    """
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.executemany(query, tags)
+    finally:
+        conn.close()
+
+

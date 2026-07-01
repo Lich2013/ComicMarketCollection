@@ -36,7 +36,10 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
                 "command": os.environ.get("IMAGE_RECOGNITION_CMD", "agy"),
                 "args": ["-p", "{prompt}"],
                 "timeout": int(os.environ.get("IMAGE_RECOGNITION_CMD_TIMEOUT", "180")),
-                "fallback_text_formatter": os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER", "true").lower() == "true"
+                "fallback_text_formatter": os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER", "true").lower() == "true",
+                "compress": os.environ.get("IMAGE_RECOGNITION_CMD_COMPRESS", "false").lower() == "true",
+                "max_size": int(os.environ.get("IMAGE_RECOGNITION_CMD_MAX_SIZE", "1500")),
+                "quality": int(os.environ.get("IMAGE_RECOGNITION_CMD_QUALITY", "85"))
             }
         },
         "langfuse": {
@@ -52,11 +55,13 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
             try:
                 user_config = yaml.safe_load(f) or {}
                 # 递归更新字典
-                for key, val in user_config.items():
-                    if isinstance(val, dict) and key in config:
-                        config[key].update(val)
-                    else:
-                        config[key] = val
+                def recursive_update(d: dict, u: dict):
+                    for k, v in u.items():
+                        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+                            recursive_update(d[k], v)
+                        else:
+                            d[k] = v
+                recursive_update(config, user_config)
             except Exception as e:
                 print(f"Error parsing config.yaml: {e}")
                 
@@ -100,6 +105,18 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
             pass
     if os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER"):
         config["image_recognition"]["cmd"]["fallback_text_formatter"] = os.environ.get("IMAGE_RECOGNITION_FALLBACK_TEXT_FORMATTER").lower() == "true"
+    if os.environ.get("IMAGE_RECOGNITION_CMD_COMPRESS"):
+        config["image_recognition"]["cmd"]["compress"] = os.environ.get("IMAGE_RECOGNITION_CMD_COMPRESS").lower() == "true"
+    if os.environ.get("IMAGE_RECOGNITION_CMD_MAX_SIZE"):
+        try:
+            config["image_recognition"]["cmd"]["max_size"] = int(os.environ.get("IMAGE_RECOGNITION_CMD_MAX_SIZE"))
+        except ValueError:
+            pass
+    if os.environ.get("IMAGE_RECOGNITION_CMD_QUALITY"):
+        try:
+            config["image_recognition"]["cmd"]["quality"] = int(os.environ.get("IMAGE_RECOGNITION_CMD_QUALITY"))
+        except ValueError:
+            pass
         
     if os.environ.get("LANGFUSE_ENABLED"):
         config["langfuse"]["enabled"] = os.environ.get("LANGFUSE_ENABLED").lower() == "true"
@@ -152,7 +169,10 @@ def write_default_config(config_path: str = DEFAULT_CONFIG_PATH):
                 "command": "agy",
                 "args": ["-p", "{prompt}"],
                 "timeout": 180,
-                "fallback_text_formatter": True
+                "fallback_text_formatter": True,
+                "compress": False,
+                "max_size": 1500,
+                "quality": 85
             }
         },
         "langfuse": {

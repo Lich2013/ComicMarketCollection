@@ -20,6 +20,7 @@ DEFAULT_PROMPT_TEMPLATE = (
     "请执行以下提取任务：\n"
     "1. 判断该图片是否是品书/お品書き（即包含同人本、制品、周边清单及其日元价格的版面）。如果属于品书且有商品列表，设置 `is_catalog` 为 true；否则为 false。\n"
     "2. 如果 `is_catalog` 为 true，提取其中列出的所有商品信息。对于每项商品，提取名称 (name)、类型 (type)、价格 (price: 整数) 以及是否为套装 (is_set)。\n\n"
+    "提取商品名称 (name) 时，符号（波浪线、括号、空格等）必须统一使用半角字符。例如：使用 '~' 而非 '～' 或 '〜'，使用 '(' ')' 而非 '（' '）'，数字和英文字母也使用半角。日文和中文文字保持原样。\n\n"
     "请严格以下面的 JSON 格式输出结果，不要包含任何多余的前后解释和文字：\n"
     "{\n"
     "  \"is_catalog\": true/false,\n"
@@ -400,28 +401,77 @@ def extract_goods_via_cmd(catalog: dict, cmd_config: dict, config: dict) -> tupl
     args = cmd_config.get("args", ["-p", "{prompt}"])
     timeout = cmd_config.get("timeout", 180)
     
-    # 构造 Prompt
-    prompt_template = cmd_config.get("prompt_template", DEFAULT_PROMPT_TEMPLATE)
-    prompt = prompt_template.replace("{image_path}", image_path) \
-                             .replace("{abs_image_path}", abs_image_path) \
-                             .replace("{circle_name}", circle_name) \
-                             .replace("{circle_author}", circle_author)
+    # 预压缩配置解析
+    compress = cmd_config.get("compress", False)
+    max_size = cmd_config.get("max_size", 1500)
+    quality = cmd_config.get("quality", 85)
     
-    # 处理参数列表中的占位符
-    processed_args = []
-    for arg in args:
-        processed_arg = arg.replace("{prompt}", prompt) \
-                           .replace("{image_path}", image_path) \
-                           .replace("{abs_image_path}", abs_image_path) \
-                           .replace("{circle_name}", circle_name) \
-                           .replace("{circle_author}", circle_author)
-        processed_args.append(processed_arg)
-        
-    cmd_parts = shlex.split(command)
-    full_cmd = cmd_parts + processed_args
-    print(f"Executing custom recognition command: {' '.join(shlex.quote(x) for x in full_cmd)}")
+    temp_image_path = None
+    target_image_path = image_path
+    target_abs_image_path = abs_image_path
     
+    if compress and image_path and os.path.exists(image_path):
+        import time
+        try:
+            tmp_dir = os.path.join("data", "images", "tmp")
+            os.makedirs(tmp_dir, exist_ok=True)
+            
+            timestamp = int(time.time() * 1000)
+            base_name = os.path.basename(image_path)
+            name_part, _ = os.path.splitext(base_name)
+            temp_filename = f"tmp_{timestamp}_{name_part}.jpg"
+            temp_image_path = os.path.join(tmp_dir, temp_filename)
+            
+            with Image.open(image_path) as img:
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                w, h = img.size
+                if max(w, h) > max_size:
+                    ratio = max_size / max(w, h)
+                    new_size = (int(w * ratio), int(h * ratio))
+                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+                img.save(temp_image_path, format="JPEG", quality=quality)
+                
+            comp_size = os.path.getsize(temp_image_path)
+            orig_size = os.path.getsize(image_path)
+            if comp_size >= orig_size * 0.9:
+                print(f"Compressed image size ({comp_size/1024:.1f}KB) is >= 90% of original ({orig_size/1024:.1f}KB). Falling back to original image.")
+                os.remove(temp_image_path)
+                temp_image_path = None
+            else:
+                target_image_path = temp_image_path
+                target_abs_image_path = os.path.abspath(temp_image_path)
+        except Exception as e:
+            print(f"Warning: Failed to pre-compress image {image_path}: {e}. Falling back to original image.")
+            if temp_image_path and os.path.exists(temp_image_path):
+                try:
+                    os.remove(temp_image_path)
+                except Exception:
+                    pass
+            temp_image_path = None
+            
     try:
+        # 构造 Prompt
+        prompt_template = cmd_config.get("prompt_template", DEFAULT_PROMPT_TEMPLATE)
+        prompt = prompt_template.replace("{image_path}", target_image_path) \
+                                 .replace("{abs_image_path}", target_abs_image_path) \
+                                 .replace("{circle_name}", circle_name) \
+                                 .replace("{circle_author}", circle_author)
+        
+        # 处理参数列表中的占位符
+        processed_args = []
+        for arg in args:
+            processed_arg = arg.replace("{prompt}", prompt) \
+                               .replace("{image_path}", target_image_path) \
+                               .replace("{abs_image_path}", target_abs_image_path) \
+                               .replace("{circle_name}", circle_name) \
+                               .replace("{circle_author}", circle_author)
+            processed_args.append(processed_arg)
+            
+        cmd_parts = shlex.split(command)
+        full_cmd = cmd_parts + processed_args
+        print(f"Executing custom recognition command: {' '.join(shlex.quote(x) for x in full_cmd)}")
+        
         result = subprocess.run(
             full_cmd,
             shell=False,
@@ -467,12 +517,19 @@ def extract_goods_via_cmd(catalog: dict, cmd_config: dict, config: dict) -> tupl
     except Exception as e:
         print(f"Error executing command: {e}")
         
+    finally:
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except Exception as e:
+                print(f"Warning: Failed to delete temporary image {temp_image_path}: {e}")
+                
     return False, []
 
 # --- 统一分发器入口 ---
 
-def extract_goods_from_catalog(catalog: dict, config: dict) -> tuple[bool, list[dict]]:
-    """主分发器入口，支持不同图像识别引擎的选择，并执行通用的数据归一化后处理"""
+def _extract_goods_from_single_image(catalog: dict, config: dict) -> tuple[bool, list[dict]]:
+    """原单图处理与归一化逻辑，仅对 catalog 中的单张图片进行解析"""
     # 兼容历史的 openai_config 传参方式
     if "api_key" in config and "image_recognition" not in config:
         provider = "openai"
@@ -523,6 +580,48 @@ def extract_goods_from_catalog(catalog: dict, config: dict) -> tuple[bool, list[
         })
         
     return True, extracted_items
+
+def extract_goods_from_catalog(catalog: dict, config: dict) -> tuple[bool, list[dict]]:
+    """主分发器入口，支持不同图像识别引擎，对多张图片分别串行处理并合并结果"""
+    image_path = catalog.get("image_path", "")
+    if not image_path:
+        return False, []
+
+    image_paths = image_path.split(",")
+    all_goods = []
+    has_any_catalog = False
+    has_any_failed = False
+
+    for path in image_paths:
+        path = path.strip()
+        if not path:
+            continue
+
+        single_catalog = catalog.copy()
+        single_catalog["image_path"] = path
+
+        try:
+            is_catalog, goods_list = _extract_goods_from_single_image(single_catalog, config)
+            if is_catalog:
+                has_any_catalog = True
+                if goods_list:
+                    all_goods.extend(goods_list)
+        except Exception as e:
+            print(f"Error processing single image {path}: {e}")
+            has_any_failed = True
+
+    if all_goods:
+        # 只要有任意一张图片成功提取出商品，即判定为品书并返回合并后的制品
+        return True, all_goods
+    elif has_any_failed:
+        # 如果没有任何商品且有图片处理报错，抛出异常以把整个 catalog 状态标为 failed，等待下次重试
+        raise Exception("One or more images failed during extraction.")
+    elif has_any_catalog:
+        # 判定是品书但没提出来任何商品
+        return True, []
+    else:
+        # 所有图片都被判定为非品书（ignored）
+        return False, []
 
 def process_pending_catalogs(
     db_path: str = None,

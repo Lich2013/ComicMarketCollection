@@ -1,0 +1,18 @@
+# cp31-comparison-report Specification
+
+## Purpose
+TBD - created by archiving change research-cp31-comparison. Update Purpose after archive.
+## Requirements
+### Requirement: 自动生成中日双城同人对比研究报告
+系统必须能根据 C108 和 CP31 的统计计算结果，在 `research/` 目录下生成对比报告 `research/comiket_vs_comicup_comparison.md`。
+报告必须涵盖以下对比内容：
+1. **时空调度模式对比表**：展示 C108 的“时空强互斥分流”与 CP31 的“时空高并发连展”的学术解释与对比。
+2. **市场集中度对比表**：对比两展的 $CR_5$, $CR_{10}$ 以及贝恩市场分类（中度寡占型 vs. 极长尾超多中心化）。
+3. **媒介类型与写作文化对比**：分析两展在漫画、小说、画册占比上的数字差异，并解释“文笔与画笔平权”与“画师/Pixiv文化”的背景。
+4. **实体物质性与流通通路对比**：包含两展在现金支付/线上App核销、无料物理交换机制、书籍装帧与赶稿复印本（コピー本）装订上的详细对比。
+5. **意愿供需模型对比**：展示基于基线估算的 DBI 与基于真实心愿单热度的 Real-time DBI 的异同。
+
+#### Scenario: 成功写入中日对比报告
+- **WHEN** 统计分析完成后触发报告生成时
+- **THEN** 系统在 `research/comiket_vs_comicup_comparison.md` 中输出格式规范、包含中日英简称清洗以及 Mermaid 图表的对比报告
+

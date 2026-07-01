@@ -50,6 +50,13 @@ image_recognition:
     timeout: 180
     # 当 JSON 解析失败但输出有文本时，是否通过低成本文本 API 进行二次规整转换
     fallback_text_formatter: true
+    # ==== 本地命令行识别预压缩配置 ====
+    # 是否在传入命令行工具前进行本地图片预压缩（可大幅减少大图处理时的显存开销并提升推理速度）
+    compress: false
+    # 压缩时的最大像素边长限制，超过此尺寸则等比下采样缩放
+    max_size: 1500
+    # 压缩时的 JPEG 质量百分比 (1-100)，85 为推荐的高清晰度平衡点
+    quality: 85
 
 langfuse:
   # 是否启用 Langfuse 链路追踪
@@ -60,6 +67,13 @@ langfuse:
   public_key: "pk-lf-your-public-key-here"
   # 你的 Langfuse Project Secret Key
   secret_key: "sk-lf-your-secret-key-here"
+
+# 自定义社团二创二次元 IP 标签正则匹配规则（会与系统默认规则合并，若重名则覆盖系统内置规则）
+# 规则格式： IP名称: "正则匹配模式" (支持管道符 | 区分多种语言别称/简称/角色名)
+# ip_rules:
+#   鸣潮: "鳴潮|めいちょう|wuthering\\s*waves|鸣潮|今汐|长离"
+#   新世纪福音战士: "エヴァンゲリオン|eva|福音战士|初号机"
+
 
 
 

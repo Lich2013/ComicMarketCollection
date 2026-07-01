@@ -33,6 +33,38 @@ def parse_cookie_string(cookie_str: str, domain: str = ".x.com") -> list[dict]:
             })
     return cookies
 
+
+def save_cookies_to_file(cookies: list[dict], filepath: str):
+    """原子性地将 Cookie 列表以 JSON 格式保存到文件，通过临时文件加重命名机制确保安全"""
+    if not filepath:
+        return
+    dir_name = os.path.dirname(filepath)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+    
+    temp_filepath = f"{filepath}.tmp"
+    try:
+        with open(temp_filepath, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, ensure_ascii=False, indent=2)
+        os.replace(temp_filepath, filepath)
+        print(f"Successfully saved and updated cookies to {filepath}.")
+    except Exception as e:
+        print(f"Error saving cookies to {filepath}: {e}")
+        if os.path.exists(temp_filepath):
+            try:
+                os.remove(temp_filepath)
+            except Exception:
+                pass
+
+
+def validate_cookies(cookies: list[dict]) -> bool:
+    """检查 Cookie 是否包含核心凭证字段，例如 auth_token"""
+    if not cookies:
+        return False
+    # 核心登录凭证字段 auth_token 必须存在且有非空值
+    return any(c.get("name") == "auth_token" and c.get("value") for c in cookies)
+
+
 CATALOG_KEYWORDS = ["品书", "品書", "お品書き", "新刊", "既刊", "颁布", "頒布", "委託", "委托", "セット", "おしながき", "カタログ"]
 
 def download_image(url: str, output_dir: str) -> str:
@@ -153,7 +185,7 @@ def is_potential_catalog(text: str, circle: dict = None) -> bool:
                         
     return False
 
-def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None, since_date: str = None, until_date: str = None) -> list[dict]:
+def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets: int = 15, circle: dict = None, since_date: str = None, until_date: str = None, cookies_file: str = None) -> list[dict]:
     """使用 Playwright 抓取作者推文，优先通过 API 拦截，备用 DOM 解析，并进行严格多维度过滤"""
     tweets_data = []
     
@@ -534,6 +566,20 @@ def scrape_twitter_profile(username: str, cookies: list[dict] = None, max_tweets
                 except Exception:
                     pass
         finally:
+            if cookies_file:
+                try:
+                    current_url = page.url if 'page' in locals() and page else ""
+                    is_login_page = "login" in current_url or "flow/login" in current_url
+                    if not is_login_page:
+                        latest_cookies = context.cookies()
+                        if validate_cookies(latest_cookies):
+                            save_cookies_to_file(latest_cookies, cookies_file)
+                        else:
+                            print("Warning: Refreshed cookies did not pass validation (missing auth_token). Skipping write-back.")
+                    else:
+                        print("Warning: Detected redirection to login page. Skipping write-back of potentially invalid cookies.")
+                except Exception as save_err:
+                    print(f"Error extracting/saving refreshed cookies: {save_err}")
             if browser:
                 browser.close()
             
@@ -551,7 +597,19 @@ def sync_circle_twitter(circle: dict, cookies: list[dict] = None, db_path: str =
     config = load_config()
     since_date = config["twitter"].get("since_date")
     until_date = config["twitter"].get("until_date")
-    tweets = scrape_twitter_profile(username, cookies=cookies, circle=circle, since_date=since_date, until_date=until_date)
+    # 仅在非直接配置 cookie_string 的情况下执行回写
+    actual_cookies_file = None
+    if not config["twitter"].get("cookie_string"):
+        actual_cookies_file = config["twitter"].get("cookies_file")
+
+    tweets = scrape_twitter_profile(
+        username,
+        cookies=cookies,
+        circle=circle,
+        since_date=since_date,
+        until_date=until_date,
+        cookies_file=actual_cookies_file
+    )
     print(f"Found {len(tweets)} potential catalog tweets for @{username}.")
     
     # Apply LLM text pre-filtering if enabled
@@ -571,22 +629,27 @@ def sync_circle_twitter(circle: dict, cookies: list[dict] = None, db_path: str =
     
     for tweet in tweets:
         tweet_id = tweet["tweet_id"]
-        for idx, img_url in enumerate(tweet["image_urls"]):
+        local_paths = []
+        for img_url in tweet["image_urls"]:
             local_path = download_image(img_url, image_dir)
             if local_path:
-                catalog_data = {
-                    "circle_id": circle_id,
-                    "tweet_id": f"{tweet_id}_{idx}",
-                    "tweet_url": tweet["tweet_url"],
-                    "tweet_text": tweet["tweet_text"],
-                    "image_path": local_path,
-                    "status": "pending"
-                }
-                if db_path:
-                    save_catalog(catalog_data, db_path=db_path)
-                else:
-                    save_catalog(catalog_data)
-                synced_count += 1
+                local_paths.append(local_path)
+                
+        if local_paths:
+            catalog_data = {
+                "circle_id": circle_id,
+                "tweet_id": tweet_id,
+                "tweet_url": tweet["tweet_url"],
+                "tweet_text": tweet["tweet_text"],
+                "image_path": ",".join(local_paths),
+                "status": "pending"
+            }
+            if db_path:
+                save_catalog(catalog_data, db_path=db_path)
+            else:
+                save_catalog(catalog_data)
+            print(f"  \033[32m[SAVED]\033[0m Synced catalog from tweet {tweet_id} with {len(local_paths)} images.")
+            synced_count += 1
                 
     return synced_count
 
@@ -663,7 +726,7 @@ def sync_all_circles_twitter(
             
     print(f"All Twitter sync completed. Synced {total_catalogs} catalog images.")
 
-def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
+def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None, cookies_file: str = None) -> dict:
     """使用 Playwright 抓取单条 X 博文详情，通过 API 拦截，备用 DOM 解析"""
     parsed_tweet = None
     
@@ -843,6 +906,20 @@ def scrape_single_tweet(tweet_url: str, cookies: list[dict] = None) -> dict:
                 except Exception:
                     pass
         finally:
+            if cookies_file:
+                try:
+                    current_url = page.url if 'page' in locals() and page else ""
+                    is_login_page = "login" in current_url or "flow/login" in current_url
+                    if not is_login_page:
+                        latest_cookies = context.cookies()
+                        if validate_cookies(latest_cookies):
+                            save_cookies_to_file(latest_cookies, cookies_file)
+                        else:
+                            print("Warning: Refreshed cookies did not pass validation (missing auth_token). Skipping write-back.")
+                    else:
+                        print("Warning: Detected redirection to login page. Skipping write-back of potentially invalid cookies.")
+                except Exception as save_err:
+                    print(f"Error extracting/saving refreshed cookies: {save_err}")
             if browser:
                 browser.close()
             
@@ -900,7 +977,11 @@ def sync_single_tweet(tweet_url: str, circle_id: int = None, cookies_file: str =
                 print(f"Error loading cookies from {actual_cookies_file}: {e}")
                 
     # 抓取博文
-    tweet = scrape_single_tweet(tweet_url, cookies=cookies)
+    actual_cookies_file = None
+    if not config["twitter"].get("cookie_string"):
+        actual_cookies_file = cookies_file or config["twitter"].get("cookies_file")
+
+    tweet = scrape_single_tweet(tweet_url, cookies=cookies, cookies_file=actual_cookies_file)
     if not tweet:
         print("Failed to scrape single tweet content.")
         return False
@@ -912,19 +993,23 @@ def sync_single_tweet(tweet_url: str, circle_id: int = None, cookies_file: str =
     if not tweet["image_urls"]:
         print("Warning: The target tweet does not contain any images.")
         
-    for idx, img_url in enumerate(tweet["image_urls"]):
+    local_paths = []
+    for img_url in tweet["image_urls"]:
         local_path = download_image(img_url, image_dir)
         if local_path:
-            catalog_data = {
-                "circle_id": circle_id,
-                "tweet_id": f"{tweet_id}_{idx}",
-                "tweet_url": tweet["tweet_url"],
-                "tweet_text": tweet["tweet_text"],
-                "image_path": local_path,
-                "status": "pending"
-            }
-            save_catalog(catalog_data, db_path=db_to_use)
-            synced_count += 1
+            local_paths.append(local_path)
+            
+    if local_paths:
+        catalog_data = {
+            "circle_id": circle_id,
+            "tweet_id": tweet_id,
+            "tweet_url": tweet["tweet_url"],
+            "tweet_text": tweet["tweet_text"],
+            "image_path": ",".join(local_paths),
+            "status": "pending"
+        }
+        save_catalog(catalog_data, db_path=db_to_use)
+        synced_count += 1
             
     print(f"Successfully synced single tweet. Saved {synced_count} catalog images for Circle ID {circle_id}.")
     return synced_count > 0

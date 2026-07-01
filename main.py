@@ -93,6 +93,21 @@ def main():
         help="导入 CPSP 原始 JSON 数据包文件夹 (如: /Users/lich/Downloads/cpp/cpsp)"
     )
     parser.add_argument(
+        "--import-c108-genres",
+        action="store_true",
+        help="从 Comiket 官网抓取并解析 C108 官方类型对照表导入数据库"
+    )
+    parser.add_argument(
+        "--tag-circles",
+        action="store_true",
+        help="运行自动打标流水线，结合文本关键字、商品和空间传播识别社团 IP 标签"
+    )
+    parser.add_argument(
+        "--search-ip",
+        type=str,
+        help="快速检索特定 IP（如：明日方舟）在 C108 的所有参展摊位并输出逛展路线推荐"
+    )
+    parser.add_argument(
         "--analyze-cp31",
         action="store_true",
         help="执行 CP31 与 Comiket (C108) 的多维度比较分析并生成研究报告"
@@ -270,6 +285,74 @@ def main():
         print(f"Starting CPSP data import from directory: {args.import_cpsp}...")
         from src.cpsp_importer import import_cpsp_dataset
         import_cpsp_dataset(args.import_cpsp, db_path=args.db_path)
+
+    # 8.3 导入 C108 官方类型对照表
+    if args.import_c108_genres:
+        print("Starting C108 genre mapping table import...")
+        from src.c108_genre_importer import import_c108_genre_mapping
+        success = import_c108_genre_mapping(db_path=args.db_path)
+        if success:
+            print("Successfully completed C108 genre mapping import.")
+        else:
+            print("Failed to import C108 genre mapping.")
+            sys.exit(1)
+
+    # 8.4 运行社团 IP 自动打标流水线
+    if args.tag_circles:
+        init_db(args.db_path)
+        print("Starting Circle & Booth IP tagging pipeline...")
+        from src.circle_tagger import run_circle_tagging
+        success = run_circle_tagging(db_path=args.db_path)
+        if success:
+            print("Successfully completed IP tagging pipeline.")
+        else:
+            print("Failed to run IP tagging pipeline.")
+            sys.exit(1)
+
+    # 8.5 检索特定 IP 的所有参展摊位物理路线
+    if args.search_ip:
+        init_db(args.db_path)
+        ip_query = args.search_ip.strip()
+        print(f"Searching for C108 booths for IP: {ip_query}...")
+        
+        from src.db import get_db_connection
+        conn = get_db_connection(args.db_path)
+        cursor = conn.cursor()
+        
+        # 从视图中关联查询特定 IP，由最近邻路径规划器进行二维物理重排
+        query = """
+            SELECT circle_name, author, day, hall, block, space, confidence, tag_source
+            FROM v_circles_with_ip_tags
+            WHERE ip_tag LIKE ?
+        """
+        try:
+            cursor.execute(query, (f"%{ip_query}%",))
+            rows = [dict(row) for row in cursor.fetchall()]
+            
+            if not rows:
+                print(f"No C108 booths found for IP query: {ip_query}")
+            else:
+                from src.route_solver import solve_greedy_route
+                optimized_rows = solve_greedy_route(rows)
+                
+                print("\n========================================================")
+                print(f"🎉 C108 【{ip_query}】参展摊位逛展路线推荐 (共 {len(optimized_rows)} 个社团)：")
+                print("========================================================")
+                for idx, row in enumerate(optimized_rows, 1):
+                    # 格式化摊位信息
+                    booth = f"{row['hall'] or ''}馆 {row['block'] or ''}{row['space'] or ''}".strip()
+                    conf_str = f"置信度: {row['confidence']:.1f} ({row['tag_source']})"
+                    print(f" {idx:2d}. 【{row['day']}曜日 - {booth:10s}】 社团: {row['circle_name']:25s} (作者: {row['author'] or '无':15s}) | {conf_str}")
+                print("========================================================")
+                print("💡 [能力边界声明] 本路线推荐及 IP 打标结果由算法预测生成。其基本原理是：")
+                print("   基于已知的文本/商品特征作为初始种子点，在 2D 展馆物理邻接图上通过半监督标签传播算法（2D-LPA）结合物理密度过滤进行空间辐射预测；")
+                print("   因此，对于缺乏文本特征且物理上完全孤立的摊位，可能存在漏报或偏差，请以现场实际情况为准。")
+                print("========================================================\n")
+        except Exception as e:
+            print(f"Error searching IP booths: {e}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            conn.close()
 
     # 9. 分析 CP31 数据并生成中日对比报告
     if args.analyze_cp31:

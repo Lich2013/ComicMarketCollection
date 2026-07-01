@@ -3,7 +3,7 @@ import time
 import requests
 import urllib3
 from urllib.parse import urlparse
-from src.db import save_circle, get_existing_circle_ids
+from src.db import save_circle, get_existing_circle_ids, get_circle
 from src.config import load_config
 
 # 禁用 urllib3 的 SSL 警告
@@ -184,6 +184,10 @@ def sync_circles_data(day_list: list[str] = None, hall_list: list[str] = None, d
 
     
     skipped_count = 0
+    new_count = 0
+    updated_count = 0
+    unchanged_count = 0
+    
     # 3. 依次拉取详情并保存到 DB
     for i, table_id in enumerate(all_table_ids, 1):
         if table_id in existing_ids:
@@ -193,13 +197,46 @@ def sync_circles_data(day_list: list[str] = None, hall_list: list[str] = None, d
         print(f"[{i}/{len(all_table_ids)}] Fetching detail for Table {table_id}...")
         detail = fetch_circle_detail(table_id, headers)
         if detail:
-            if db_path:
-                save_circle(detail, db_path=db_path)
+            # 查询已存在的社团详情进行比对
+            old_detail = get_circle(detail["id"], db_path=db_path) if db_path else get_circle(detail["id"])
+            if not old_detail:
+                # 新增社团
+                print(f"  \033[32m[NEW]\033[0m Circle {detail['id']} ('{detail['name']}') added at {detail['day']} {detail['hall']} {detail['block']}-{detail['space']}")
+                if db_path:
+                    save_circle(detail, db_path=db_path)
+                else:
+                    save_circle(detail)
+                new_count += 1
+                total_synced += 1
             else:
-                save_circle(detail)
-            total_synced += 1
+                # 比对字段，查找实际修改
+                diff_fields = []
+                fields_to_compare = [
+                    "name", "author", "genre", "description", "hall", "day", "block", "space", 
+                    "twitter_url", "twitter_username", "pixiv_url", "circle_cut_url"
+                ]
+                for f in fields_to_compare:
+                    old_val = old_detail.get(f)
+                    new_val = detail.get(f)
+                    # 归一化 None 和空字符串进行比较，防误判
+                    if (old_val or "") != (new_val or ""):
+                        diff_fields.append(f"{f}: '{old_val}' -> '{new_val}'")
+                
+                if diff_fields:
+                    # 发生了实际修改
+                    print(f"  \033[33m[UPDATE]\033[0m Circle {detail['id']} ('{detail['name']}') updated: {', '.join(diff_fields)}")
+                    if db_path:
+                        save_circle(detail, db_path=db_path)
+                    else:
+                        save_circle(detail)
+                    updated_count += 1
+                    total_synced += 1
+                else:
+                    # 无变化，跳过数据库写入
+                    print(f"  [UNCHANGED] Circle {detail['id']} ('{detail['name']}') has no changes.")
+                    unchanged_count += 1
         
         # 每次抓取后延迟 0.5 秒，避免触发服务器速率限制/被封 IP
         time.sleep(0.5)
             
-    print(f"Sync complete. Successfully synced {total_synced} circles (Skipped {skipped_count} already synced).")
+    print(f"Sync complete. Total circles synced: {total_synced} (New: {new_count}, Updated: {updated_count}, Unchanged: {unchanged_count}, Skipped deduplicated: {skipped_count}).")
